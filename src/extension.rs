@@ -81,15 +81,21 @@ impl<'q> QueryExt<'q> {
         let limit = self
             .limit
             .map(|limit| format!(" LIMIT {limit}"))
-            .unwrap_or(String::new());
+            .unwrap_or_default();
 
         let sort_by = self
             .sort_by
             .as_ref()
             .map(|s| format!(" ORDER BY {} {}", s.columns.join(","), s.dir))
-            .unwrap_or(String::new());
+            .unwrap_or_default();
 
         format!("{clauses}{sort_by}{limit}")
+    }
+}
+
+impl<'q> Default for QueryExt<'q> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

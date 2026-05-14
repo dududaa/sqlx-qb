@@ -41,7 +41,7 @@ impl<'q> SqlxQb<'q> {
         mut query: Query<'q, Postgres, PgArguments>,
     ) -> Query<'q, Postgres, PgArguments> {
         if let QueryCommand::Update(_, set) = &self.cmd {
-            for (_, value) in set.inner() {
+            for value in set.inner().values() {
                 query = value.clone().bind_to_query(query);
             }
         }

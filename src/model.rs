@@ -14,7 +14,7 @@ pub trait Model: Sized + Send + Unpin + for<'r> FromRow<'r, PgRow> {
         filters: QueryExt,
     ) -> impl Future<Output = Result<Self, sqlx::Error>> + Send {
         async {
-            let query = select_query(&Self::TABLE_NAME, filters.with_limit(1));
+            let query = select_query(Self::TABLE_NAME, filters.with_limit(1));
             query.fetch_one(db_pool).await
         }
     }
@@ -24,7 +24,7 @@ pub trait Model: Sized + Send + Unpin + for<'r> FromRow<'r, PgRow> {
         filters: QueryExt,
     ) -> impl Future<Output = Result<Vec<Self>, sqlx::Error>> {
         async {
-            let query = select_query(&Self::TABLE_NAME, filters);
+            let query = select_query(Self::TABLE_NAME, filters);
             query.fetch_all(db_pool).await
         }
     }
@@ -40,7 +40,7 @@ pub trait Model: Sized + Send + Unpin + for<'r> FromRow<'r, PgRow> {
         (R,): for<'r> FromRow<'r, PgRow>,
     {
         async {
-            let query = select_fields_query(&Self::TABLE_NAME, fields, filters.with_limit(1));
+            let query = select_fields_query(Self::TABLE_NAME, fields, filters.with_limit(1));
             query.fetch_scalar_one(db_pool).await
         }
     }
@@ -54,7 +54,7 @@ pub trait Model: Sized + Send + Unpin + for<'r> FromRow<'r, PgRow> {
         R: Send + Unpin + for<'r> FromRow<'r, PgRow>,
     {
         async {
-            let query = select_fields_query(&Self::TABLE_NAME, fields, filters);
+            let query = select_fields_query(Self::TABLE_NAME, fields, filters);
             query.fetch_fields_all(db_pool).await
         }
     }
@@ -65,7 +65,7 @@ pub trait Model: Sized + Send + Unpin + for<'r> FromRow<'r, PgRow> {
         filters: QueryExt<'q>,
     ) -> impl Future<Output = anyhow::Result<()>> + Send {
         async {
-            let query = update_query(&Self::TABLE_NAME, set, filters);
+            let query = update_query(Self::TABLE_NAME, set, filters);
             query.execute(db_pool).await?;
 
             Ok(())
@@ -77,7 +77,7 @@ pub trait Model: Sized + Send + Unpin + for<'r> FromRow<'r, PgRow> {
         filters: QueryExt,
     ) -> impl Future<Output = Result<(), sqlx::Error>> + Send {
         async {
-            let query = delete_query(&Self::TABLE_NAME, filters);
+            let query = delete_query(Self::TABLE_NAME, filters);
             query.execute(db_pool).await?;
 
             Ok(())
