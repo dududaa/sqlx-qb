@@ -1,0 +1,19 @@
+[package]
+name = "sqlx_qb"
+version = "0.1.0"
+edition = "2021"
+description = "A simple query builder for sqlx."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/dududaa/sqlx-qb"
+readme = "README.md"
+keywords = ["rust", "sqlx", "query-builder"]
+categories = ["database"]
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+sqlx = { version = "0.8", features = ["runtime-tokio", "tls-native-tls", "postgres", "chrono", "uuid"] }
+anyhow = "1.0.102"
+uuid = { version = "1.23.1", features = ["v4"] }
+chrono = "0.4.44"
