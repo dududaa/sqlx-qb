@@ -63,7 +63,7 @@ pub trait Model: Sized + Send + Unpin + for<'r> FromRow<'r, PgRow> {
         db_pool: &DbPool,
         set: QuerySet<'q>,
         filters: QueryExt<'q>,
-    ) -> impl Future<Output = anyhow::Result<()>> + Send {
+    ) -> impl Future<Output = Result<(), sqlx::Error>> + Send {
         async {
             let query = update_query(Self::TABLE_NAME, set, filters);
             query.execute(db_pool).await?;
@@ -88,5 +88,5 @@ pub trait Model: Sized + Send + Unpin + for<'r> FromRow<'r, PgRow> {
 pub trait ModelInsertArg<M: Model> {
     type Returns;
 
-    fn insert(self, db_pool: &DbPool) -> impl Future<Output = anyhow::Result<Self::Returns>>;
+    fn insert(self, db_pool: &DbPool) -> impl Future<Output = Result<Self::Returns, sqlx::Error>> + Send;
 }
