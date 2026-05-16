@@ -1,7 +1,6 @@
 use crate::QbEngine;
 use sqlx::query::{Query as SqlxQuery, QueryAs as SqlxQueryAs, QueryScalar as SqlxQueryScalar};
 use sqlx::{Database, Decode, Encode, FromRow, Type};
-use std::ops::Deref;
 
 pub struct Query<'q, DB: Database>(SqlxQuery<'q, DB, DB::Arguments<'q>>);
 
