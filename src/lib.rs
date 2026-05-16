@@ -1,17 +1,30 @@
 pub mod apis;
 pub mod extension;
-pub mod value;
 pub mod model;
+mod query;
+pub mod value;
+
+#[cfg(feature = "postgres")]
+type QbEngine = sqlx::Postgres;
+
+#[cfg(feature = "mysql")]
+type QbEngine = sqlx::MySql;
+
+#[cfg(feature = "sqlite")]
+type QbEngine = sqlx::Sqlite;
+
+#[cfg(feature = "any")]
+type QbEngine = sqlx::Any;
 
 use crate::model::Model;
 use extension::QueryExt;
 use sqlx::postgres::{PgArguments, PgQueryResult, PgRow};
-use sqlx::query::{Query, QueryAs, QueryScalar};
-use sqlx::{FromRow, Pool, Postgres};
+use sqlx::{Database, Decode, Encode, FromRow, Pool, Postgres, Type};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use value::QbValue;
 
+use crate::query::{Query, QueryAs, QueryScalar, QueryWrapper};
 pub use apis::{select_query, update_query};
 
 pub type DbPool = Pool<Postgres>;
@@ -36,43 +49,15 @@ impl<'q> SqlxQb<'q> {
         format!("{}{}", self.cmd, builder_sql)
     }
 
-    fn bind_values_on_query(
-        &self,
-        mut query: Query<'q, Postgres, PgArguments>,
-    ) -> Query<'q, Postgres, PgArguments> {
+    fn bind_values<Q: QueryWrapper<'q>>(&self, mut query: Q) -> Q {
         if let QueryCommand::Update(_, set) = &self.cmd {
             for value in set.inner().values() {
-                query = value.clone().bind_to_query(query);
+                query = value.clone().bind(query);
             }
         }
 
         for clause in self.ext.filters() {
-            query = clause.value().bind_to_query(query);
-        }
-
-        query
-    }
-
-    fn bind_values_on_query_as<M>(
-        &self,
-        mut query: QueryAs<'q, Postgres, M, PgArguments>,
-    ) -> QueryAs<'q, Postgres, M, PgArguments>
-    where
-        M: Sized + Send + Unpin + for<'r> FromRow<'r, PgRow>,
-    {
-        for clause in self.ext.filters() {
-            query = clause.value().bind_to_query_as(query);
-        }
-
-        query
-    }
-
-    fn bind_values_on_query_scalar<R>(
-        &self,
-        mut query: QueryScalar<'q, Postgres, R, PgArguments>,
-    ) -> QueryScalar<'q, Postgres, R, PgArguments> {
-        for clause in self.ext.filters() {
-            query = clause.value().bind_to_query_scalar(query);
+            query = clause.value().bind(query);
         }
 
         query
@@ -80,14 +65,16 @@ impl<'q> SqlxQb<'q> {
 
     pub async fn fetch_all<M: Model>(&self, db_pool: &DbPool) -> Result<Vec<M>, sqlx::Error> {
         let sql = self.sql_str();
-        let query = self.bind_values_on_query_as(sqlx::query_as::<Postgres, M>(&sql));
+        let query = QueryAs::new(&sql);
+        let query = self.bind_values(query).into_inner();
 
         query.fetch_all(db_pool).await
     }
 
     pub async fn fetch_one<M: Model>(&self, db_pool: &DbPool) -> Result<M, sqlx::Error> {
         let sql = self.sql_str();
-        let query = self.bind_values_on_query_as(sqlx::query_as::<Postgres, M>(&sql));
+        let query = QueryAs::new(&sql);
+        let query = self.bind_values(query).into_inner();
 
         query.fetch_one(db_pool).await
     }
@@ -95,10 +82,12 @@ impl<'q> SqlxQb<'q> {
     pub async fn fetch_scalar_one<R>(&self, db_pool: &DbPool) -> Result<R, sqlx::Error>
     where
         R: Send + Unpin,
-        (R,): for<'r> FromRow<'r, PgRow>,
+        R: for<'r> Encode<'r, QbEngine> + for<'r> Decode<'r, QbEngine> + Type<QbEngine>,
+        (R,): for<'r> FromRow<'r, <QbEngine as Database>::Row>,
     {
         let sql = self.sql_str();
-        let query = self.bind_values_on_query_scalar(sqlx::query_scalar::<Postgres, R>(&sql));
+        let query = QueryScalar::new(&sql);
+        let query = self.bind_values(query).into_inner();
 
         query.fetch_one(db_pool).await
     }
@@ -108,14 +97,16 @@ impl<'q> SqlxQb<'q> {
         R: Send + Unpin + for<'r> FromRow<'r, PgRow>,
     {
         let sql = self.sql_str();
-        let query = self.bind_values_on_query_as(sqlx::query_as::<Postgres, R>(&sql));
+        let query = QueryAs::new(&sql);
+        let query = self.bind_values(query).into_inner();
 
         query.fetch_all(db_pool).await
     }
 
     pub async fn execute(&self, db_pool: &DbPool) -> Result<PgQueryResult, sqlx::Error> {
         let sql = self.sql_str();
-        let query = self.bind_values_on_query(sqlx::query::<Postgres>(&sql));
+        let query = Query::new(&sql);
+        let query = self.bind_values(query).into_inner();
 
         query.execute(db_pool).await
     }
