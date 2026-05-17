@@ -42,7 +42,7 @@ use crate::model::Model;
 use crate::query::{Query, QueryAs, QueryScalar, QueryWrapper};
 use map::QueryMap;
 use modifiers::QueryModifiers;
-use sqlx::postgres::{PgQueryResult, PgRow};
+use sqlx::postgres::PgQueryResult;
 use sqlx::{Database, Decode, Encode, FromRow, Pool, Postgres, Type};
 use std::fmt::{Display, Formatter};
 use std::marker::PhantomData;
@@ -53,7 +53,7 @@ pub struct QB<'q, M: Model> {
 }
 
 impl<'q, M: Model> QB<'q, M> {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             inner: SqlxQb::default(),
             _model: PhantomData::default(),
@@ -64,34 +64,39 @@ impl<'q, M: Model> QB<'q, M> {
         self.inner.sql_str()
     }
 
-    pub fn insert(map: QueryMap<'q>) -> Self {
-        Self::new().with_command(QueryCommand::Insert(M::TABLE_NAME, map))
+    pub fn insert(self, map: QueryMap<'q>) -> Self {
+        self.with_command(QueryCommand::Insert(M::TABLE_NAME, map))
     }
 
-    pub fn select() -> Self {
-        Self::new().with_command(QueryCommand::Select(
+    pub fn select(self) -> Self {
+        self.with_command(QueryCommand::Select(
             QuerySelectCommand::SelectAll,
             M::TABLE_NAME,
         ))
     }
 
-    pub fn select_fields(fields: Vec<&'q str>) -> Self {
-        Self::new().with_command(QueryCommand::Select(
+    pub fn select_fields(self, fields: Vec<&'q str>) -> Self {
+        self.with_command(QueryCommand::Select(
             QuerySelectCommand::SelectFields(fields),
             M::TABLE_NAME,
         ))
     }
 
-    pub fn update(set: QueryMap<'q>) -> Self {
-        Self::new().with_command(QueryCommand::Update(M::TABLE_NAME, set))
+    pub fn update(self, set: QueryMap<'q>) -> Self {
+        self.with_command(QueryCommand::Update(M::TABLE_NAME, set))
     }
 
-    pub fn delete() -> Self {
-        Self::new().with_command(QueryCommand::Delete(M::TABLE_NAME))
+    pub fn delete(self) -> Self {
+        self.with_command(QueryCommand::Delete(M::TABLE_NAME))
     }
 
     pub fn with_modifiers(mut self, modifiers: QueryModifiers<'q>) -> Self {
         self.inner.modifiers = modifiers;
+        self
+    }
+
+    pub fn reset_modifiers(mut self) -> Self {
+        self.inner.modifiers = QueryModifiers::default();
         self
     }
 
@@ -128,14 +133,14 @@ impl<'q, M: Model> QB<'q, M> {
 
     pub async fn fetch_fields<R>(&self, db_pool: &DbPool) -> Result<R, sqlx::Error>
     where
-        R: Send + Unpin + for<'r> FromRow<'r, PgRow>,
+        R: Send + Unpin + for<'r> FromRow<'r, <QbEngine as Database>::Row>,
     {
         self.inner.fetch_fields_one(db_pool).await
     }
 
     pub async fn fetch_fields_all<R>(&self, db_pool: &DbPool) -> Result<Vec<R>, sqlx::Error>
     where
-        R: Send + Unpin + for<'r> FromRow<'r, PgRow>,
+        R: Send + Unpin + for<'r> FromRow<'r, <QbEngine as Database>::Row>,
     {
         self.inner.fetch_fields_all(db_pool).await
     }
@@ -227,7 +232,7 @@ impl<'q> SqlxQb<'q> {
 
     pub async fn fetch_fields_one<R>(&self, db_pool: &DbPool) -> Result<R, sqlx::Error>
     where
-        R: Send + Unpin + for<'r> FromRow<'r, PgRow>,
+        R: Send + Unpin + for<'r> FromRow<'r, <QbEngine as Database>::Row>,
     {
         let sql = self.sql_str();
         let query = QueryAs::new(&sql);
@@ -238,7 +243,7 @@ impl<'q> SqlxQb<'q> {
 
     pub async fn fetch_fields_all<R>(&self, db_pool: &DbPool) -> Result<Vec<R>, sqlx::Error>
     where
-        R: Send + Unpin + for<'r> FromRow<'r, PgRow>,
+        R: Send + Unpin + for<'r> FromRow<'r, <QbEngine as Database>::Row>,
     {
         let sql = self.sql_str();
         let query = QueryAs::new(&sql);
@@ -347,7 +352,9 @@ mod tests {
             .or(eq("pid", Uuid::new_v4()))
             .with_limit(1);
 
-        let query = QB::<TestUserModel>::select().with_modifiers(modifiers);
+        let query = QB::<TestUserModel>::new()
+            .select()
+            .with_modifiers(modifiers);
 
         assert_eq!(
             query.sql_str(),
@@ -368,7 +375,9 @@ mod tests {
           "age": 34
         };
 
-        let query = QB::<TestUserModel>::update(set).with_modifiers(modifiers);
+        let query = QB::<TestUserModel>::new()
+            .update(set)
+            .with_modifiers(modifiers);
         assert_eq!(
             query.sql_str(),
             "UPDATE users SET age = $1, name = $2 WHERE id = $3 AND business_id = $4 OR pid = $5"
@@ -382,7 +391,7 @@ mod tests {
           "age": 34
         };
 
-        let query = QB::<TestUserModel>::insert(map);
+        let query = QB::<TestUserModel>::new().insert(map);
         assert_eq!(
             query.sql_str(),
             "INSERT INTO users (age, name) VALUES ($1, $2)"
@@ -393,7 +402,9 @@ mod tests {
     fn test_order_by() {
         let modifiers =
             QueryModifiers::new().with_sort(query_sort!(QuerySortDir::DESC, "created_at"));
-        let query = QB::<TestUserModel>::select().with_modifiers(modifiers);
+        let query = QB::<TestUserModel>::new()
+            .select()
+            .with_modifiers(modifiers);
 
         assert_eq!(
             query.sql_str(),
