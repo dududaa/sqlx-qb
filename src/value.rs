@@ -1,6 +1,5 @@
 use crate::query::QueryWrapper;
 use chrono::{DateTime, Utc};
-use sqlx::Database;
 use uuid::Uuid;
 
 #[derive(Clone)]

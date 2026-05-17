@@ -2,13 +2,13 @@ use crate::apis::extension::{and, or};
 use crate::value::QbValue;
 use std::fmt::{Display, Formatter};
 
-pub struct QueryExt<'q> {
+pub struct QueryModifiers<'q> {
     filters: Vec<QueryFilter<'q>>,
     limit: Option<usize>,
     sort_by: Option<QuerySort<'q>>,
 }
 
-impl<'q> QueryExt<'q> {
+impl<'q> QueryModifiers<'q> {
     pub fn new() -> Self {
         Self {
             filters: vec![],
@@ -93,7 +93,7 @@ impl<'q> QueryExt<'q> {
     }
 }
 
-impl<'q> Default for QueryExt<'q> {
+impl<'q> Default for QueryModifiers<'q> {
     fn default() -> Self {
         Self::new()
     }

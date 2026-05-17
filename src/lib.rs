@@ -1,43 +1,130 @@
 pub mod apis;
-pub mod extension;
 pub mod model;
+pub mod modifiers;
 mod query;
 pub mod value;
 
 #[cfg(feature = "postgres")]
-type QbEngine = sqlx::Postgres;
+type QbEngine = Postgres;
 
 #[cfg(feature = "mysql")]
-type QbEngine = sqlx::MySql;
+type QbEngine = MySql;
 
 #[cfg(feature = "sqlite")]
-type QbEngine = sqlx::Sqlite;
+type QbEngine = Sqlite;
 
 #[cfg(feature = "any")]
 type QbEngine = sqlx::Any;
 
 use crate::model::Model;
-use extension::QueryExt;
-use sqlx::postgres::{PgArguments, PgQueryResult, PgRow};
+use modifiers::QueryModifiers;
+use sqlx::postgres::{PgQueryResult, PgRow};
 use sqlx::{Database, Decode, Encode, FromRow, Pool, Postgres, Type};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
+use std::marker::PhantomData;
 use value::QbValue;
 
 use crate::query::{Query, QueryAs, QueryScalar, QueryWrapper};
-pub use apis::{select_query, update_query};
 
-pub type DbPool = Pool<Postgres>;
+pub struct QB<'q, M: Model> {
+    inner: SqlxQb<'q>,
+    _model: PhantomData<M>,
+}
+
+impl<'q, M: Model> QB<'q, M> {
+    fn new() -> Self {
+        Self {
+            inner: SqlxQb::default(),
+            _model: PhantomData::default(),
+        }
+    }
+
+    pub fn sql_str(&self) -> String {
+        self.inner.sql_str()
+    }
+
+    pub fn select() -> Self {
+        Self::new().with_command(QueryCommand::Select(
+            QuerySelectCommand::SelectAll,
+            M::TABLE_NAME,
+        ))
+    }
+
+    pub fn select_fields(fields: Vec<&'q str>) -> Self {
+        Self::new().with_command(QueryCommand::Select(
+            QuerySelectCommand::SelectFields(fields),
+            M::TABLE_NAME,
+        ))
+    }
+
+    pub fn update(set: QuerySet<'q>) -> Self {
+        Self::new().with_command(QueryCommand::Update(M::TABLE_NAME, set))
+    }
+
+    pub fn delete() -> Self {
+        Self::new().with_command(QueryCommand::Delete(M::TABLE_NAME))
+    }
+
+    pub fn with_modifiers(mut self, modifiers: QueryModifiers<'q>) -> Self {
+        self.inner.modifiers = modifiers;
+        self
+    }
+
+    fn with_command(mut self, cmd: QueryCommand<'q>) -> Self {
+        self.inner.cmd = cmd;
+        self
+    }
+
+    pub async fn fetch(&self, db_pool: &DbPool) -> Result<M, sqlx::Error> {
+        self.inner.fetch_one(db_pool).await
+    }
+
+    pub async fn fetch_all(&self, db_pool: &DbPool) -> Result<Vec<M>, sqlx::Error> {
+        self.inner.fetch_all(db_pool).await
+    }
+
+    pub async fn fetch_scalar<R>(&self, db_pool: &DbPool) -> Result<R, sqlx::Error>
+    where
+        R: Send + Unpin,
+        R: for<'r> Encode<'r, QbEngine> + for<'r> Decode<'r, QbEngine> + Type<QbEngine>,
+        (R,): for<'r> FromRow<'r, <QbEngine as Database>::Row>,
+    {
+        self.inner.fetch_scalar_one(db_pool).await
+    }
+
+    pub async fn fetch_scalar_all<R>(&self, db_pool: &DbPool) -> Result<Vec<R>, sqlx::Error>
+    where
+        R: Send + Unpin,
+        R: for<'r> Encode<'r, QbEngine> + for<'r> Decode<'r, QbEngine> + Type<QbEngine>,
+        (R,): for<'r> FromRow<'r, <QbEngine as Database>::Row>,
+    {
+        self.inner.fetch_scalar_all(db_pool).await
+    }
+
+    pub async fn fetch_fields<R>(&self, db_pool: &DbPool) -> Result<R, sqlx::Error>
+    where
+        R: Send + Unpin + for<'r> FromRow<'r, PgRow>,
+    {
+        self.inner.fetch_fields_one(db_pool).await
+    }
+
+    pub async fn fetch_fields_all<R>(&self, db_pool: &DbPool) -> Result<Vec<R>, sqlx::Error>
+    where
+        R: Send + Unpin + for<'r> FromRow<'r, PgRow>,
+    {
+        self.inner.fetch_fields_all(db_pool).await
+    }
+}
+
+pub type DbPool = Pool<QbEngine>;
 
 pub struct SqlxQb<'q> {
     cmd: QueryCommand<'q>,
-    ext: QueryExt<'q>,
+    modifiers: QueryModifiers<'q>,
 }
 
 impl<'q> SqlxQb<'q> {
-    fn new(cmd: QueryCommand<'q>, ext: QueryExt<'q>) -> SqlxQb<'q> {
-        SqlxQb { cmd, ext }
-    }
 
     fn sql_str(&self) -> String {
         let mut arg_offset = 1;
@@ -45,7 +132,7 @@ impl<'q> SqlxQb<'q> {
             arg_offset += set.inner().len();
         }
 
-        let builder_sql = self.ext.sql_str(&arg_offset);
+        let builder_sql = self.modifiers.sql_str(&arg_offset);
         format!("{}{}", self.cmd, builder_sql)
     }
 
@@ -56,14 +143,14 @@ impl<'q> SqlxQb<'q> {
             }
         }
 
-        for clause in self.ext.filters() {
+        for clause in self.modifiers.filters() {
             query = clause.value().bind(query);
         }
 
         query
     }
 
-    pub async fn fetch_all<M: Model>(&self, db_pool: &DbPool) -> Result<Vec<M>, sqlx::Error> {
+    async fn fetch_all<M: Model>(&self, db_pool: &DbPool) -> Result<Vec<M>, sqlx::Error> {
         let sql = self.sql_str();
         let query = QueryAs::new(&sql);
         let query = self.bind_values(query).into_inner();
@@ -71,7 +158,7 @@ impl<'q> SqlxQb<'q> {
         query.fetch_all(db_pool).await
     }
 
-    pub async fn fetch_one<M: Model>(&self, db_pool: &DbPool) -> Result<M, sqlx::Error> {
+    async fn fetch_one<M: Model>(&self, db_pool: &DbPool) -> Result<M, sqlx::Error> {
         let sql = self.sql_str();
         let query = QueryAs::new(&sql);
         let query = self.bind_values(query).into_inner();
@@ -79,7 +166,7 @@ impl<'q> SqlxQb<'q> {
         query.fetch_one(db_pool).await
     }
 
-    pub async fn fetch_scalar_one<R>(&self, db_pool: &DbPool) -> Result<R, sqlx::Error>
+    async fn fetch_scalar_one<R>(&self, db_pool: &DbPool) -> Result<R, sqlx::Error>
     where
         R: Send + Unpin,
         R: for<'r> Encode<'r, QbEngine> + for<'r> Decode<'r, QbEngine> + Type<QbEngine>,
@@ -87,6 +174,30 @@ impl<'q> SqlxQb<'q> {
     {
         let sql = self.sql_str();
         let query = QueryScalar::new(&sql);
+        let query = self.bind_values(query).into_inner();
+
+        query.fetch_one(db_pool).await
+    }
+
+    async fn fetch_scalar_all<R>(&self, db_pool: &DbPool) -> Result<Vec<R>, sqlx::Error>
+    where
+        R: Send + Unpin,
+        R: for<'r> Encode<'r, QbEngine> + for<'r> Decode<'r, QbEngine> + Type<QbEngine>,
+        (R,): for<'r> FromRow<'r, <QbEngine as Database>::Row>,
+    {
+        let sql = self.sql_str();
+        let query = QueryScalar::new(&sql);
+        let query = self.bind_values(query).into_inner();
+
+        query.fetch_all(db_pool).await
+    }
+
+    pub async fn fetch_fields_one<R>(&self, db_pool: &DbPool) -> Result<R, sqlx::Error>
+    where
+        R: Send + Unpin + for<'r> FromRow<'r, PgRow>,
+    {
+        let sql = self.sql_str();
+        let query = QueryAs::new(&sql);
         let query = self.bind_values(query).into_inner();
 
         query.fetch_one(db_pool).await
@@ -112,6 +223,15 @@ impl<'q> SqlxQb<'q> {
     }
 }
 
+impl<'q> Default for SqlxQb<'q> {
+    fn default() -> Self {
+        Self {
+            cmd: QueryCommand::Null,
+            modifiers: QueryModifiers::default(),
+        }
+    }
+}
+
 enum QuerySelectCommand<'q> {
     SelectAll,
     SelectFields(Vec<&'q str>),
@@ -121,6 +241,7 @@ enum QueryCommand<'q> {
     Select(QuerySelectCommand<'q>, &'q str),
     Update(&'q str, QuerySet<'q>),
     Delete(&'q str),
+    Null,
 }
 
 impl<'q> Display for QueryCommand<'q> {
@@ -144,6 +265,7 @@ impl<'q> Display for QueryCommand<'q> {
 
                 format!("UPDATE {} SET {}", table_name, ff)
             }
+            QueryCommand::Null => "NULL".to_string(),
         };
 
         write!(f, "{}", cmd)
@@ -172,19 +294,26 @@ impl<'q> QuerySet<'q> {
 mod tests {
     use super::*;
     use crate::apis::extension::eq;
-    use crate::extension::{QuerySort, QuerySortDir};
-    use crate::{select_query, update_query};
+    use crate::modifiers::{QuerySort, QuerySortDir};
+    use sqlx::FromRow;
     use uuid::Uuid;
+
+    #[derive(FromRow)]
+    struct TestUserModel {}
+
+    impl Model for TestUserModel {
+        const TABLE_NAME: &'static str = "users";
+    }
 
     #[test]
     fn test_select_query_sql_str() {
-        let qb = QueryExt::new()
+        let modifiers = QueryModifiers::new()
             .with_filter(("id", 32))
             .and(eq("business_id", 32))
             .or(eq("pid", Uuid::new_v4()))
             .with_limit(1);
 
-        let query = select_query("users", qb);
+        let query = QB::<TestUserModel>::select().with_modifiers(modifiers);
 
         assert_eq!(
             query.sql_str(),
@@ -195,13 +324,13 @@ mod tests {
 
     #[test]
     fn test_update_query_sql_str() {
-        let qb = QueryExt::new()
+        let modifiers = QueryModifiers::new()
             .with_filter(("id", 32))
             .and(eq("business_id", 32))
             .or(eq("pid", Uuid::new_v4()));
 
         let set = QuerySet::new("name", "Demo User").add("age", 34);
-        let query = update_query("users", set, qb);
+        let query = QB::<TestUserModel>::update(set).with_modifiers(modifiers);
 
         assert_eq!(
             query.sql_str(),
@@ -211,9 +340,9 @@ mod tests {
 
     #[test]
     fn test_order_by() {
-        let qb_ext =
-            QueryExt::new().with_sort(QuerySort::new(vec!["created_at"], QuerySortDir::DESC));
-        let query = select_query("users", qb_ext);
+        let modifiers =
+            QueryModifiers::new().with_sort(QuerySort::new(vec!["created_at"], QuerySortDir::DESC));
+        let query = QB::<TestUserModel>::select().with_modifiers(modifiers);
 
         assert_eq!(
             query.sql_str(),

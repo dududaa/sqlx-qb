@@ -25,3 +25,6 @@ chrono = ["sqlx/chrono"]
 sqlx = { version = "0.8", default-features = false }
 uuid = { version = "1.23.1", features = ["v4"] }
 chrono = "0.4.44"
+
+[dev-dependencies]
+sqlx = "0.8.6"
