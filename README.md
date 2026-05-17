@@ -45,7 +45,7 @@ impl Model for UserModel {
 }
 
 // 3. Start using QB. This function demonstrates how to use QB.
-async fn qb_demo() {
+async fn qb_demo() -> anyhow::Result<()> {
     // create sqlx pool by yourself (I'm deliberately leaving this up to you)
     let pool = PgPoolOptions::new()
         .max_connections(5)
@@ -58,29 +58,27 @@ async fn qb_demo() {
       "age": 34
     };
 
-    let qb = QB::<UserModel>::new().insert(map); // INSERT INTO users (name, age) VALUES ("Demo User", 34)
-    qb.execute(&pool).await?; // run the query
+    let mut qb = QB::<UserModel>::new(); // create QB instance 
+    qb.insert(map, &pool).await?; // INSERT INTO users (name, age) VALUES ("Demo User", 34)
 
     // RETRIEVE users. You can use existing QB or create a new one.
-    let mut qb = qb.select(); // SELECT * FROM users;
-    let users = qb.fetch_all(&pool).await?; // This returns all users in Vec<UserModel>
+    qb.select_all(); // SELECT * FROM users (This returns all users in Vec<UserModel>);
 
     // Add query modifiers to the query
     let modifiers = QueryModifiers::new()
         .with_filter(("id", 4)) // WHERE clause with equal
         .and(eq("age", 32))
         .or(eq("public_id", "some-uuid"))
-        .with_limit(1); // query LIMIT (always add this if you want to call the 'fetch' method to retrieve a single model);
+        .with_limit(1); // query LIMIT (always add this if you want to call the 'select' method to retrieve a single model);
 
-    let qb = qb.with_modifiers(modifiers); // SELECT * FROM users WHERE id = 4 AND age = 32 OR public_id = some-uuid LIMIT 1;
-    let user = qb.fetch(&pool).await?; // This returns a single UserModel
+    qb.set_modifiers(modifiers); // SELECT * FROM users WHERE id = 4 AND age = 32 OR public_id = some-uuid LIMIT 1;
+    qb.select(&pool).await?; // This returns a single UserModel
 
     // You can clear the modifiers at any time
-    let qb = qb.reset_modifiers();
+    qb.reset_modifiers();
 
-    // What if you only need to get specific fields of the model
-    let qb = qb.select_fields(vec!["id", "name"]);
-    let (id, name) = qb.fetch_fields(&pool).await?;
+    // What if you only need to get specific fields of the model?
+    let (id, name) = qb.select_fields(vec!["id", "name"], &pool).await?;
 
     // Time to UPDATE a user
     let map = query_map! {
@@ -88,11 +86,11 @@ async fn qb_demo() {
       "age": 52
     };
 
-    let qb = qb.update(map);
-    qb.execute(&pool).await;
+    qb.update(map, &pool).await?;
 
     // DELETE user
-    let qb = qb.delete();
-    qb.execute(&pool).await;
+    qb.delete(&pool).await?;
+    
+    Ok(())
 }
 ```
