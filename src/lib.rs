@@ -1,9 +1,18 @@
-pub mod apis;
+pub mod extensions;
 mod map;
 pub mod model;
 pub mod modifiers;
 mod query;
 pub mod value;
+pub mod prelude {
+    pub use crate::extensions::*;
+    pub use crate::map::*;
+    pub use crate::model::*;
+    pub use crate::modifiers::*;
+    pub use crate::query_map;
+    pub use crate::query_sort;
+    pub use crate::QB;
+}
 
 #[cfg(feature = "postgres")]
 type QbEngine = Postgres;
@@ -319,10 +328,7 @@ impl<'q> Display for QueryCommand<'q> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::apis::extension::eq;
-    use crate::map::QueryMap;
-    use crate::modifiers::{QuerySort, QuerySortDir};
+    use crate::prelude::*;
     use sqlx::FromRow;
     use uuid::Uuid;
 
@@ -386,7 +392,7 @@ mod tests {
     #[test]
     fn test_order_by() {
         let modifiers =
-            QueryModifiers::new().with_sort(QuerySort::new(vec!["created_at"], QuerySortDir::DESC));
+            QueryModifiers::new().with_sort(query_sort!(QuerySortDir::DESC, "created_at"));
         let query = QB::<TestUserModel>::select().with_modifiers(modifiers);
 
         assert_eq!(

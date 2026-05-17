@@ -1,4 +1,4 @@
-use crate::apis::extension::{and, or};
+use crate::extensions::{and, or};
 use crate::value::QbValue;
 use std::fmt::{Display, Formatter};
 
@@ -189,4 +189,11 @@ impl Display for QuerySortDir {
 
         write!(f, "{}", s)
     }
+}
+
+#[macro_export]
+macro_rules! query_sort {
+    ( $dir:expr, $( $column:literal ),* $(,)? ) => {{
+        QuerySort::new(vec![$( $column, )*], $dir)
+    }};
 }

@@ -3,7 +3,7 @@ use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 #[derive(Clone)]
-pub enum QbValue<'q> {
+pub(crate) enum QbValue<'q> {
     Int(i32),
     SmallInt(i16),
     BigInt(i64),
