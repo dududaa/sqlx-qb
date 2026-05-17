@@ -46,7 +46,7 @@ async fn qb_demo(){
         .connect(&url)
         .await?;
     
-    // Insert new user.
+    // INSERT new user.
     let map = query_map! {
       "name": "Demo User",
       "age": 34
@@ -55,7 +55,7 @@ async fn qb_demo(){
     let qb = QB::<UserModel>::new().insert(map); // INSERT INTO users (name, age) VALUES ("Demo User", 34)
     qb.execute(&pool).await?; // run the query
     
-    // Get all users. You can use existing QB or create a new one.
+    // RETRIEVE users. You can use existing QB or create a new one.
     let mut qb = qb.select(); // SELECT * FROM users;
     let users = qb.fetch_all(&pool).await?; // This returns all users in Vec<UserModel>
     
