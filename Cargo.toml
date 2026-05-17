@@ -13,7 +13,6 @@ categories = ["database"]
 path = "src/lib.rs"
 
 [features]
-default = ["postgres"]
 postgres = ["sqlx/postgres"]
 mysql = ["sqlx/mysql"]
 sqlite = ["sqlx/sqlite"]
@@ -27,4 +26,5 @@ uuid = { version = "1.23.1", features = ["v4"] }
 chrono = "0.4.44"
 
 [dev-dependencies]
-sqlx = "0.8.6"
+sqlx = { version = "0.8.6", features = ["sqlite", "runtime-tokio"] }
+tokio = { version = "1.52.3", features = ["macros", "rt"] }

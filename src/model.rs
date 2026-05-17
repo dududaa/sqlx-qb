@@ -1,67 +1,63 @@
-use crate::{DbPool, QbEngine, QB};
-use sqlx::postgres::PgRow;
-use sqlx::{Database, Decode, Encode, FromRow, Type};
+use crate::{DbPool, QbEngine, QbResult, QB};
+use sqlx::{Database, FromRow};
 use std::future::Future;
 
-pub trait Model: Sized + Send + Unpin + for<'r> FromRow<'r, PgRow> {
+pub trait Model: Sized + Send + Unpin + for<'r> FromRow<'r, <QbEngine as Database>::Row> {
     const TABLE_NAME: &'static str;
 
-    fn fetch<'q>(
+    fn insert<'q>(
+        qb: &'q QB<'q, Self>,
+        db_pool: &DbPool,
+    ) -> impl Future<Output = Result<QbResult, sqlx::Error>> {
+        async { qb.execute(db_pool).await }
+    }
+
+    fn select<'q>(
         qb: &'q QB<'q, Self>,
         db_pool: &DbPool,
     ) -> impl Future<Output = Result<Self, sqlx::Error>> {
-        async { qb.query_fetch_one(db_pool).await }
+        async { qb.fetch_one(db_pool).await }
     }
 
-    fn fetch_all<'q>(
+    fn select_all<'q>(
         qb: &'q QB<'q, Self>,
         db_pool: &DbPool,
     ) -> impl Future<Output = Result<Vec<Self>, sqlx::Error>> {
-        async { qb.query_fetch_all(db_pool).await }
+        async { qb.fetch_all(db_pool).await }
     }
 
-    fn fetch_scalar<'q, R>(
-        qb: &'q QB<'q, Self>,
-        db_pool: &DbPool,
-    ) -> impl Future<Output = Result<R, sqlx::Error>>
-    where
-        R: Send + Unpin,
-        R: for<'r> Encode<'r, QbEngine> + for<'r> Decode<'r, QbEngine> + Type<QbEngine>,
-        (R,): for<'r> FromRow<'r, <QbEngine as Database>::Row>,
-    {
-        async { qb.query_fetch_scalar(db_pool).await }
-    }
-
-    fn fetch_scalar_all<'q, R>(
-        qb: &'q QB<'q, Self>,
-        db_pool: &DbPool,
-    ) -> impl Future<Output = Result<Vec<R>, sqlx::Error>>
-    where
-        R: Send + Unpin,
-        R: for<'r> Encode<'r, QbEngine> + for<'r> Decode<'r, QbEngine> + Type<QbEngine>,
-        (R,): for<'r> FromRow<'r, <QbEngine as Database>::Row>,
-    {
-        async { qb.query_fetch_scalar_all(db_pool).await }
-    }
-
-    fn fetch_fields<'q, R>(
+    fn select_fields<'q, R>(
         qb: &'q QB<'q, Self>,
         db_pool: &DbPool,
     ) -> impl Future<Output = Result<R, sqlx::Error>>
     where
         R: Send + Unpin + for<'r> FromRow<'r, <QbEngine as Database>::Row>,
     {
-        async { qb.query_fetch_fields(db_pool).await }
+        async { qb.fetch_fields_one(db_pool).await }
     }
 
-    fn fetch_fields_all<'q, R>(
+    fn select_fields_all<'q, R>(
         qb: &'q QB<'q, Self>,
         db_pool: &DbPool,
     ) -> impl Future<Output = Result<Vec<R>, sqlx::Error>>
     where
         R: Send + Unpin + for<'r> FromRow<'r, <QbEngine as Database>::Row>,
     {
-        async { qb.query_fetch_fields_all(db_pool).await }
+        async { qb.fetch_fields_all(db_pool).await }
+    }
+
+    fn update<'q>(
+        qb: &'q QB<'q, Self>,
+        db_pool: &DbPool,
+    ) -> impl Future<Output = Result<QbResult, sqlx::Error>> {
+        async { qb.execute(db_pool).await }
+    }
+
+    fn delete<'q>(
+        qb: &'q QB<'q, Self>,
+        db_pool: &DbPool,
+    ) -> impl Future<Output = Result<QbResult, sqlx::Error>> {
+        async { qb.execute(db_pool).await }
     }
 }
 
