@@ -16,6 +16,18 @@ type QbEngine = Sqlite;
 #[cfg(feature = "any")]
 type QbEngine = sqlx::Any;
 
+#[cfg(feature = "postgres")]
+type QbResult = PgQueryResult;
+
+#[cfg(feature = "mysql")]
+type QbResult = MySqlQueryResult;
+
+#[cfg(feature = "sqlite")]
+type QbResult = SqliteQueryResult;
+
+#[cfg(feature = "any")]
+type QbResult = AnyQueryResult;
+
 use crate::model::Model;
 use modifiers::QueryModifiers;
 use sqlx::postgres::{PgQueryResult, PgRow};
@@ -44,6 +56,10 @@ impl<'q, M: Model> QB<'q, M> {
         self.inner.sql_str()
     }
 
+    pub fn insert(map: QueryMap<'q>) -> Self {
+        Self::new().with_command(QueryCommand::Insert(M::TABLE_NAME, map))
+    }
+
     pub fn select() -> Self {
         Self::new().with_command(QueryCommand::Select(
             QuerySelectCommand::SelectAll,
@@ -58,7 +74,7 @@ impl<'q, M: Model> QB<'q, M> {
         ))
     }
 
-    pub fn update(set: QuerySet<'q>) -> Self {
+    pub fn update(set: QueryMap<'q>) -> Self {
         Self::new().with_command(QueryCommand::Update(M::TABLE_NAME, set))
     }
 
@@ -115,17 +131,20 @@ impl<'q, M: Model> QB<'q, M> {
     {
         self.inner.fetch_fields_all(db_pool).await
     }
+
+    pub async fn execute(&self, db_pool: &DbPool) -> Result<QbResult, sqlx::Error> {
+        self.inner.execute(db_pool).await
+    }
 }
 
 pub type DbPool = Pool<QbEngine>;
 
-pub struct SqlxQb<'q> {
+struct SqlxQb<'q> {
     cmd: QueryCommand<'q>,
     modifiers: QueryModifiers<'q>,
 }
 
 impl<'q> SqlxQb<'q> {
-
     fn sql_str(&self) -> String {
         let mut arg_offset = 1;
         if let QueryCommand::Update(_, set) = &self.cmd {
@@ -139,6 +158,12 @@ impl<'q> SqlxQb<'q> {
     fn bind_values<Q: QueryWrapper<'q>>(&self, mut query: Q) -> Q {
         if let QueryCommand::Update(_, set) = &self.cmd {
             for value in set.inner().values() {
+                query = value.clone().bind(query);
+            }
+        }
+
+        if let QueryCommand::Insert(_, map) = &self.cmd {
+            for value in map.inner().values() {
                 query = value.clone().bind(query);
             }
         }
@@ -214,7 +239,7 @@ impl<'q> SqlxQb<'q> {
         query.fetch_all(db_pool).await
     }
 
-    pub async fn execute(&self, db_pool: &DbPool) -> Result<PgQueryResult, sqlx::Error> {
+    pub async fn execute(&self, db_pool: &DbPool) -> Result<QbResult, sqlx::Error> {
         let sql = self.sql_str();
         let query = Query::new(&sql);
         let query = self.bind_values(query).into_inner();
@@ -238,8 +263,9 @@ enum QuerySelectCommand<'q> {
 }
 
 enum QueryCommand<'q> {
+    Insert(&'q str, QueryMap<'q>),
     Select(QuerySelectCommand<'q>, &'q str),
-    Update(&'q str, QuerySet<'q>),
+    Update(&'q str, QueryMap<'q>),
     Delete(&'q str),
     Null,
 }
@@ -247,6 +273,26 @@ enum QueryCommand<'q> {
 impl<'q> Display for QueryCommand<'q> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let cmd = match self {
+            QueryCommand::Insert(table_name, map) => {
+                let columns = map
+                    .inner()
+                    .iter()
+                    .map(|(col, _)| col.to_string())
+                    .collect::<Vec<_>>();
+                let values = map
+                    .inner()
+                    .iter()
+                    .enumerate()
+                    .map(|(i, _)| format!("${}", i))
+                    .collect::<Vec<_>>();
+
+                format!(
+                    "INSERT INTO {} ({}) VALUES({})",
+                    table_name,
+                    columns.join(", "),
+                    values.join(", ")
+                )
+            }
             QueryCommand::Select(select, table_name) => match select {
                 QuerySelectCommand::SelectAll => format!("SELECT * FROM {}", table_name),
                 QuerySelectCommand::SelectFields(fields) => {
@@ -272,13 +318,13 @@ impl<'q> Display for QueryCommand<'q> {
     }
 }
 
-pub struct QuerySet<'q>(HashMap<&'q str, QbValue<'q>>);
-impl<'q> QuerySet<'q> {
+pub struct QueryMap<'q>(HashMap<&'q str, QbValue<'q>>);
+impl<'q> QueryMap<'q> {
     pub fn new(key: &'q str, value: impl Into<QbValue<'q>>) -> Self {
         let mut map = HashMap::new();
         map.insert(key, value.into());
 
-        QuerySet(map)
+        QueryMap(map)
     }
     pub fn add(mut self, key: &'q str, value: impl Into<QbValue<'q>>) -> Self {
         self.0.insert(key, value.into());
@@ -329,7 +375,7 @@ mod tests {
             .and(eq("business_id", 32))
             .or(eq("pid", Uuid::new_v4()));
 
-        let set = QuerySet::new("name", "Demo User").add("age", 34);
+        let set = QueryMap::new("name", "Demo User").add("age", 34);
         let query = QB::<TestUserModel>::update(set).with_modifiers(modifiers);
 
         assert_eq!(
