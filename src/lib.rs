@@ -1,4 +1,5 @@
 pub mod apis;
+mod map;
 pub mod model;
 pub mod modifiers;
 mod query;
@@ -29,15 +30,13 @@ type QbResult = SqliteQueryResult;
 type QbResult = AnyQueryResult;
 
 use crate::model::Model;
+use crate::query::{Query, QueryAs, QueryScalar, QueryWrapper};
+use map::QueryMap;
 use modifiers::QueryModifiers;
 use sqlx::postgres::{PgQueryResult, PgRow};
 use sqlx::{Database, Decode, Encode, FromRow, Pool, Postgres, Type};
-use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::marker::PhantomData;
-use value::QbValue;
-
-use crate::query::{Query, QueryAs, QueryScalar, QueryWrapper};
 
 pub struct QB<'q, M: Model> {
     inner: SqlxQb<'q>,
@@ -283,11 +282,11 @@ impl<'q> Display for QueryCommand<'q> {
                     .inner()
                     .iter()
                     .enumerate()
-                    .map(|(i, _)| format!("${}", i))
+                    .map(|(i, _)| format!("${}", i + 1))
                     .collect::<Vec<_>>();
 
                 format!(
-                    "INSERT INTO {} ({}) VALUES({})",
+                    "INSERT INTO {} ({}) VALUES ({})",
                     table_name,
                     columns.join(", "),
                     values.join(", ")
@@ -318,28 +317,11 @@ impl<'q> Display for QueryCommand<'q> {
     }
 }
 
-pub struct QueryMap<'q>(HashMap<&'q str, QbValue<'q>>);
-impl<'q> QueryMap<'q> {
-    pub fn new(key: &'q str, value: impl Into<QbValue<'q>>) -> Self {
-        let mut map = HashMap::new();
-        map.insert(key, value.into());
-
-        QueryMap(map)
-    }
-    pub fn add(mut self, key: &'q str, value: impl Into<QbValue<'q>>) -> Self {
-        self.0.insert(key, value.into());
-        self
-    }
-
-    fn inner(&self) -> &HashMap<&'q str, QbValue<'q>> {
-        &self.0
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::apis::extension::eq;
+    use crate::map::QueryMap;
     use crate::modifiers::{QuerySort, QuerySortDir};
     use sqlx::FromRow;
     use uuid::Uuid;
@@ -375,13 +357,30 @@ mod tests {
             .and(eq("business_id", 32))
             .or(eq("pid", Uuid::new_v4()));
 
-        let set = QueryMap::new("name", "Demo User").add("age", 34);
-        let query = QB::<TestUserModel>::update(set).with_modifiers(modifiers);
+        let set = query_map! {
+          "name": "Demo User",
+          "age": 34
+        };
 
+        let query = QB::<TestUserModel>::update(set).with_modifiers(modifiers);
         assert_eq!(
             query.sql_str(),
             "UPDATE users SET age = $1, name = $2 WHERE id = $3 AND business_id = $4 OR pid = $5"
         );
+    }
+
+    #[test]
+    fn test_insert_query_sql_str() {
+        let map = query_map! {
+          "name": "Demo User",
+          "age": 34
+        };
+
+        let query = QB::<TestUserModel>::insert(map);
+        assert_eq!(
+            query.sql_str(),
+            "INSERT INTO users (age, name) VALUES ($1, $2)"
+        )
     }
 
     #[test]
