@@ -6,8 +6,8 @@ If you rust SQLx, you most likely realize how great the library is. However, you
 for every single task not matter how simple. This is where [SqlxQB](#sqlx-qb) comes in. It aims to simplify the process
 of writing simple CRUD queries by providing APIs that write the queries for you and map the results to your models.
 
-> ⚠️ Status: Early-stage project
-This library is still in its early development phase and is not yet production-ready. Expect breaking changes and incomplete features.
+>#### ⚠️ Status: Early-stage project<br>
+>This library is still in its early development phase and is not yet production-ready. Expect breaking changes and incomplete features.
 
 That said, feedback, testing, and contributions are highly encouraged. If this project interests you, feel free to get involved!
 ### Installation
