@@ -2,11 +2,12 @@
 
 A simple query builder for [SQLx](https://github.com/launchbadge/sqlx).
 
-If you rust SQLx, you most likely realize how great the library is. However, you have to write (and rewrite) raw queries
+If you use rust SQLx, you most likely realize how great the library is. However, you have to write (and rewrite) raw
+queries
 for every single task no matter how simple. This is where [SqlxQB](#sqlx-qb) comes in. It aims to simplify the process
 of writing simple CRUD queries by providing APIs that write the queries for you and map the results to your models.
 
-> #### ⚠️ Status: Early-stage project<br>
+> **⚠️ Status: Early-stage project**<br>
 >This library is still in its early development phase and is not yet production-ready. Expect breaking changes and
 > incomplete features.
 
@@ -90,7 +91,7 @@ async fn qb_demo() -> anyhow::Result<()> {
 
     // DELETE user
     qb.delete(&pool).await?;
-    
+
     Ok(())
 }
 ```
