@@ -46,8 +46,11 @@ where
         self.0
     }
 }
+
+#[allow(dead_code)]
 pub struct QueryScalar<'q, DB: Database, R>(SqlxQueryScalar<'q, DB, R, DB::Arguments<'q>>);
 
+#[allow(dead_code)]
 impl<'q, R> QueryScalar<'q, QbEngine, R>
 where
     R: 'q + Encode<'q, QbEngine> + Decode<'q, QbEngine> + Type<QbEngine>,

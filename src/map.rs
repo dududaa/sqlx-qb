@@ -17,6 +17,12 @@ impl<'q> QueryMap<'q> {
     }
 }
 
+impl<'q> Default for QueryMap<'q> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[macro_export]
 macro_rules! query_map {
     ( $( $key:literal : $value:expr ),* $(,)? ) => {{

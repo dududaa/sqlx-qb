@@ -43,7 +43,7 @@ impl<'q, M: Model> QB<'q, M> {
     pub fn new(pool: &'q DbPool) -> Self {
         Self {
             inner: SqlxQb::default(),
-            _model: PhantomData::default(),
+            _model: PhantomData,
             pool,
         }
     }
@@ -220,6 +220,7 @@ impl<'q> SqlxQb<'q> {
         query.fetch_all(db_pool).await
     }
 
+    #[allow(dead_code)]
     pub(crate) async fn fetch_scalar_one<R>(&self, db_pool: &DbPool) -> Result<R, sqlx::Error>
     where
         R: Send + Unpin,
@@ -233,6 +234,7 @@ impl<'q> SqlxQb<'q> {
         query.fetch_one(db_pool).await
     }
 
+    #[allow(dead_code)]
     pub(crate) async fn fetch_scalar_all<R>(&self, db_pool: &DbPool) -> Result<Vec<R>, sqlx::Error>
     where
         R: Send + Unpin,
@@ -305,8 +307,8 @@ impl<'q> Display for QueryCommand<'q> {
             QueryCommand::Insert(table_name, map) => {
                 let columns = map
                     .inner()
-                    .iter()
-                    .map(|(col, _)| col.to_string())
+                    .keys()
+                    .map(|col| col.to_string())
                     .collect::<Vec<_>>();
                 let values = map
                     .inner()
