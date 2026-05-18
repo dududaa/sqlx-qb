@@ -4,10 +4,9 @@ use std::future::Future;
 
 pub trait Model: Sized + Send + Unpin + for<'r> FromRow<'r, <QbEngine as Database>::Row> {
     const TABLE_NAME: &'static str;
+    type InsertReturns;
 
-    fn insert<'q>(qb: &'q QB<'q, Self>) -> impl Future<Output = Result<QbResult, sqlx::Error>> {
-        async { qb.execute(qb.pool).await }
-    }
+    fn insert<'q>(qb: &'q QB<'q, Self>) -> impl Future<Output = Result<Self::InsertReturns, sqlx::Error>>;
 
     fn select<'q>(qb: &'q QB<'q, Self>) -> impl Future<Output = Result<Self, sqlx::Error>> {
         async { qb.fetch_one(qb.pool).await }

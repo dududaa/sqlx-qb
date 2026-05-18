@@ -13,14 +13,16 @@ pub mod prelude {
     pub use crate::modifiers::*;
     pub use crate::query_map;
     pub use crate::query_sort;
+    pub use crate::DbPool;
     pub use crate::QB;
     pub use qb_macro::QbModel;
     pub use sqlx::FromRow;
+    pub use std::future::Future;
 }
 
 use types::*;
 
-use crate::model::Model;
+use crate::model::{Model, ModelInsertArg};
 use crate::query::{Query, QueryAs, QueryScalar, QueryWrapper};
 use map::QueryMap;
 use modifiers::QueryModifiers;
@@ -54,7 +56,7 @@ impl<'q, M: Model> QB<'q, M> {
         self.inner.sql_str()
     }
 
-    pub async fn insert(&mut self, map: QueryMap<'q>) -> Result<QbResult, sqlx::Error> {
+    pub async fn insert(&mut self, map: QueryMap<'q>) -> Result<M::InsertReturns, sqlx::Error> {
         self.with_command(QueryCommand::Insert(M::TABLE_NAME, map));
         let modifiers = self.modifiers;
         self.reset_modifiers();
@@ -65,6 +67,13 @@ impl<'q, M: Model> QB<'q, M> {
         }
 
         result
+    }
+
+    pub async fn insert_args<A: ModelInsertArg<M>>(
+        &self,
+        args: A,
+    ) -> Result<A::Returns, sqlx::Error> {
+        args.insert(self.pool).await
     }
 
     pub async fn select(&mut self) -> Result<M, sqlx::Error> {
@@ -85,7 +94,10 @@ impl<'q, M: Model> QB<'q, M> {
         M::select_all(self).await
     }
 
-    pub async fn select_fields<R>(&mut self, fields: impl Into<Vec<&'q str>>) -> Result<R, sqlx::Error>
+    pub async fn select_fields<R>(
+        &mut self,
+        fields: impl Into<Vec<&'q str>>,
+    ) -> Result<R, sqlx::Error>
     where
         R: Send + Unpin + for<'r> FromRow<'r, <QbEngine as Database>::Row>,
     {
@@ -99,13 +111,13 @@ impl<'q, M: Model> QB<'q, M> {
 
     pub async fn select_fields_all<R>(
         &mut self,
-        fields: Vec<&'q str>,
+        fields: impl Into<Vec<&'q str>>,
     ) -> Result<Vec<R>, sqlx::Error>
     where
         R: Send + Unpin + for<'r> FromRow<'r, <QbEngine as Database>::Row>,
     {
         self.with_command(QueryCommand::Select(
-            QuerySelectCommand::Fields(fields),
+            QuerySelectCommand::Fields(fields.into()),
             M::TABLE_NAME,
         ));
 
@@ -185,7 +197,7 @@ impl<'q> SqlxQb<'q> {
         query
     }
 
-    fn set_modifiers(&mut self, modifiers: &'q QueryModifiers<'q>) {
+    pub fn set_modifiers(&mut self, modifiers: &'q QueryModifiers<'q>) {
         self.modifiers = Some(modifiers);
     }
 

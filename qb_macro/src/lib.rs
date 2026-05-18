@@ -28,6 +28,14 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
     let expanded = quote! {
         impl Model for #ident {
             const TABLE_NAME: &'static str = #table_name;
+            type InsertReturns = ();
+            
+            fn insert<'q>(qb: &'q QB<'q, Self>) -> impl Future<Output = Result<Self::InsertReturns, sqlx::Error>> {
+                async {
+                    let _ = qb.execute(qb.pool).await?;
+                    Ok(())
+                }
+            }
         }
     };
 

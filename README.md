@@ -8,13 +8,13 @@ for every single task no matter how simple. This is where [SqlxQB](#sqlx-qb) com
 of writing simple CRUD queries by providing APIs that write the queries for you and map the results to your models.
 
 > **⚠️ Status: Early-stage project**<br>
->This library is still in its early development phase and is not yet production-ready. Expect breaking changes and
+> This library is still in its early development phase and is not yet production-ready. Expect breaking changes and
 > incomplete features.
 
 That said, feedback, testing, and contributions are highly encouraged. If this project interests you, feel free to get
 involved!
 
-### Installation
+## Installation
 
 Add it to your Cargo.toml
 
@@ -22,15 +22,15 @@ Add it to your Cargo.toml
 sqlx_qb = { git = "https://github.com/dududaa/sqlx-qb" } 
 ```
 
-### Usage
+## Usage
 
-Follow the steps in this sample code to start using QB:
+You can start using Sqlx-QB in two simple steps:
+
+#### 1. Derive `QbModel` and `FromRow` for your model.
 
 ```rust
-use sqlx::FromRow;
 use sqlx_qb::prelude::*;
 
-// 1. Your model must derive QbModel and FromRow
 #[derive(QbModel, FromRow)]
 #[model(table_name = "users")] // If table name is not provided, we'll use snake_case of your model's identifier.
 struct UserModel {
@@ -40,26 +40,73 @@ struct UserModel {
     public_id: Uuid,
     created_at: Datetime<Utc>
 }
+```
 
+#### 2. Create `QB` instance and starting using the interfaces.
 
-// 2. Start using QB. This function demonstrates how to use QB.
-async fn qb_demo() -> anyhow::Result<()> {
-    // create sqlx pool by yourself (I'm deliberately leaving this up to you)
+```rust
+async fn main() -> anyhow::Result<()> {
+    // create SQLx pool by yourself.
     let pool = PgPoolOptions::new()
         .max_connections(5)
         .connect(&url)
         .await?;
 
-    let mut qb = QB::<UserModel>::new(&pool); // create QB instance
-    
-    // INSERT new user.
+    let mut qb = QB::<UserModel>::new(&pool); // create mutable QB instance
+}
+```
+
+###### INSERT models
+
+```rust
+async fn main() -> anyhow::Result<()> {
+    // ...
+    // Define the input map
     let map = query_map! {
       "name": "Demo User",
       "age": 34
     };
 
     qb.insert(map).await?; // INSERT INTO users (name, age) VALUES ("Demo User", 34)
+}
+```
+We also provide `insert_args` which allows you to insert *your own type* and define how you want it to be inserted.
+The input type must implement `ModelInsertArg<M: Model>`.
+```rust
+// Define input args
+struct UserInsertArgs {
+    name: String,
+    age: i16,
+}
 
+// implement ModelInsertArgs
+impl ModelInsertArg<M: Model> for UserInsertArgs {
+    type Returns = i32;
+
+    fn insert(
+        self,
+        db_pool: &DbPool,
+    ) -> impl Future<Output = Result<Self::Returns, sqlx::Error>> + Send {
+        async { 
+            let id = sqlx::query_scalar!("INSERT INTO users(name, age) VALUES($1, $2) RETURNING id").fetch_one(db_pool).await?;
+            Ok(id)
+        }
+    }
+}
+
+// Insert the args anywhere
+async fn main() -> anyhow::Result<()> {
+    // ...
+    let args = UserInsertArgs{..};
+    qb.insert_args(args).await?;
+}
+```
+
+###### RETRIEVE models
+
+```rust
+async fn main() -> anyhow::Result<()> {
+    // ...
     // RETRIEVE users. You can use existing QB or create a new one.
     qb.select_all(); // SELECT * FROM users (This returns all users in Vec<UserModel>);
 
@@ -75,13 +122,31 @@ async fn qb_demo() -> anyhow::Result<()> {
 
     // What if you only need to get specific fields of the model?
     let (id, name) = qb.select_fields(["id", "name"]).await?;
-    
+}
+```
+
+###### More on modifiers
+
+Be careful with Modifiers! The same modifiers will be used across multiple operations of **the same** `QB` instance. If
+you're unsure if current modifiers match your current query, you can either `reset_modifiers` to remove them or update
+them with `set_modifiers`.
+
+```rust
+    async fn main() -> anyhow::Result<()> {
+    // ...
     // You can clear the modifiers at any time
     qb.reset_modifiers();
-    
+
     // Or set new modifiers
     qb.set_modifiers(&modifiers);
-    
+}
+```
+
+###### UPDATE models
+
+```rust
+async fn main() -> anyhow::Result<()> {
+    // ...
     // Time to UPDATE a user
     let map = query_map! {
       "name": "Updated User Name",
@@ -89,10 +154,15 @@ async fn qb_demo() -> anyhow::Result<()> {
     };
 
     qb.update(map).await?;
+}
+```
 
+###### DELETE models
+
+```rust
+async fn main() -> anyhow::Result<()> {
+    // ...
     // DELETE user
     qb.delete().await?;
-
-    Ok(())
 }
 ```
