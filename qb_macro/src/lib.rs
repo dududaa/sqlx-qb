@@ -32,7 +32,7 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
 
             fn insert<'q>(qb: &'q QB<'q, Self>) -> impl Future<Output = Result<Self::InsertReturns, sqlx::Error>> {
                 async {
-                    let _ = qb.execute(qb.pool).await?;
+                    let _ = qb.execute(qb.pool()).await?;
                     Ok(())
                 }
             }
