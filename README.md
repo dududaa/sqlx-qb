@@ -70,15 +70,18 @@ async fn qb_demo() -> anyhow::Result<()> {
         .or(eq("public_id", "some-uuid"))
         .with_limit(1); // query LIMIT (always add this if you want to call the 'select' method to retrieve a single model);
 
-    qb.set_modifiers(modifiers); // SELECT * FROM users WHERE id = 4 AND age = 32 OR public_id = some-uuid LIMIT 1;
+    qb.set_modifiers(&modifiers); // SELECT * FROM users WHERE id = 4 AND age = 32 OR public_id = some-uuid LIMIT 1;
     qb.select().await?; // This returns a single UserModel
 
+    // What if you only need to get specific fields of the model?
+    let (id, name) = qb.select_fields(["id", "name"]).await?;
+    
     // You can clear the modifiers at any time
     qb.reset_modifiers();
-
-    // What if you only need to get specific fields of the model?
-    let (id, name) = qb.select_fields(vec!["id", "name"]).await?;
-
+    
+    // Or set new modifiers
+    qb.set_modifiers(&modifiers);
+    
     // Time to UPDATE a user
     let map = query_map! {
       "name": "Updated User Name",

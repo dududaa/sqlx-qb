@@ -85,12 +85,12 @@ impl<'q, M: Model> QB<'q, M> {
         M::select_all(self).await
     }
 
-    pub async fn select_fields<R>(&mut self, fields: Vec<&'q str>) -> Result<R, sqlx::Error>
+    pub async fn select_fields<R>(&mut self, fields: impl Into<Vec<&'q str>>) -> Result<R, sqlx::Error>
     where
         R: Send + Unpin + for<'r> FromRow<'r, <QbEngine as Database>::Row>,
     {
         self.with_command(QueryCommand::Select(
-            QuerySelectCommand::Fields(fields),
+            QuerySelectCommand::Fields(fields.into()),
             M::TABLE_NAME,
         ));
 
