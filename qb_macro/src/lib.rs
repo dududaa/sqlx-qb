@@ -13,10 +13,10 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
             let _ = attr.parse_nested_meta(|meta| {
                 if meta.path.is_ident("table_name") {
                     let value = meta.value()?;
-                    if let Expr::Lit(expr_lit) = value.parse::<Expr>()? {
-                        if let Lit::Str(lit_str) = expr_lit.lit {
-                            table_name = lit_str.value();
-                        }
+                    if let Expr::Lit(expr_lit) = value.parse::<Expr>()?
+                        && let Lit::Str(lit_str) = expr_lit.lit
+                    {
+                        table_name = lit_str.value();
                     }
                 }
 
@@ -29,7 +29,7 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
         impl Model for #ident {
             const TABLE_NAME: &'static str = #table_name;
             type InsertReturns = ();
-            
+
             fn insert<'q>(qb: &'q QB<'q, Self>) -> impl Future<Output = Result<Self::InsertReturns, sqlx::Error>> {
                 async {
                     let _ = qb.execute(qb.pool).await?;
