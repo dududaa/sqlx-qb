@@ -201,7 +201,7 @@ impl<'q> SqlxQb<'q> {
         self.modifiers = Some(modifiers);
     }
 
-    pub(crate) async fn fetch_one<M: Model>(&self, db_pool: &DbPool) -> Result<M, sqlx::Error> {
+    pub async fn fetch_one<M: Model>(&self, db_pool: &DbPool) -> Result<M, sqlx::Error> {
         let sql = self.sql_str();
         let query = QueryAs::new(&sql);
         let query = self.bind_values(query).into_inner();
@@ -209,7 +209,7 @@ impl<'q> SqlxQb<'q> {
         query.fetch_one(db_pool).await
     }
 
-    pub(crate) async fn fetch_all<M: Model>(
+    pub async fn fetch_all<M: Model>(
         &self,
         db_pool: &DbPool,
     ) -> Result<Vec<M>, sqlx::Error> {
@@ -221,7 +221,7 @@ impl<'q> SqlxQb<'q> {
     }
 
     #[allow(dead_code)]
-    pub(crate) async fn fetch_scalar_one<R>(&self, db_pool: &DbPool) -> Result<R, sqlx::Error>
+    pub async fn fetch_scalar_one<R>(&self, db_pool: &DbPool) -> Result<R, sqlx::Error>
     where
         R: Send + Unpin,
         R: for<'r> Encode<'r, QbEngine> + for<'r> Decode<'r, QbEngine> + Type<QbEngine>,
@@ -235,7 +235,7 @@ impl<'q> SqlxQb<'q> {
     }
 
     #[allow(dead_code)]
-    pub(crate) async fn fetch_scalar_all<R>(&self, db_pool: &DbPool) -> Result<Vec<R>, sqlx::Error>
+    pub async fn fetch_scalar_all<R>(&self, db_pool: &DbPool) -> Result<Vec<R>, sqlx::Error>
     where
         R: Send + Unpin,
         R: for<'r> Encode<'r, QbEngine> + for<'r> Decode<'r, QbEngine> + Type<QbEngine>,
@@ -248,7 +248,7 @@ impl<'q> SqlxQb<'q> {
         query.fetch_all(db_pool).await
     }
 
-    pub(crate) async fn fetch_fields_one<R>(&self, db_pool: &DbPool) -> Result<R, sqlx::Error>
+    pub async fn fetch_fields_one<R>(&self, db_pool: &DbPool) -> Result<R, sqlx::Error>
     where
         R: Send + Unpin + for<'r> FromRow<'r, <QbEngine as Database>::Row>,
     {
@@ -259,7 +259,7 @@ impl<'q> SqlxQb<'q> {
         query.fetch_one(db_pool).await
     }
 
-    pub(crate) async fn fetch_fields_all<R>(&self, db_pool: &DbPool) -> Result<Vec<R>, sqlx::Error>
+    pub async fn fetch_fields_all<R>(&self, db_pool: &DbPool) -> Result<Vec<R>, sqlx::Error>
     where
         R: Send + Unpin + for<'r> FromRow<'r, <QbEngine as Database>::Row>,
     {
@@ -270,7 +270,7 @@ impl<'q> SqlxQb<'q> {
         query.fetch_all(db_pool).await
     }
 
-    pub(crate) async fn execute(&self, db_pool: &DbPool) -> Result<QbResult, sqlx::Error> {
+    pub async fn execute(&self, db_pool: &DbPool) -> Result<QbResult, sqlx::Error> {
         let sql = self.sql_str();
         let query = Query::new(&sql);
         let query = self.bind_values(query).into_inner();
