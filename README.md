@@ -88,7 +88,7 @@ impl ModelInsertArg<M: Model> for UserInsertArgs {
         db_pool: &DbPool,
     ) -> impl Future<Output = Result<Self::Returns, sqlx::Error>> + Send {
         async { 
-            let id = sqlx::query_scalar!("INSERT INTO users(name, age) VALUES($1, $2) RETURNING id").fetch_one(db_pool).await?;
+            let id = sqlx::query_scalar!("INSERT INTO users(name, age) VALUES($1, $2) RETURNING id", &self.name, &self.age).fetch_one(db_pool).await?;
             Ok(id)
         }
     }
