@@ -98,7 +98,7 @@ impl ModelInsertArg<M: Model> for UserInsertArgs {
 async fn main() -> anyhow::Result<()> {
     // ...
     let args = UserInsertArgs{..};
-    qb.insert_args(args).await?;
+    let id = qb.insert_args(args).await?;
 }
 ```
 
