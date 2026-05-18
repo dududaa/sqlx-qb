@@ -50,14 +50,15 @@ async fn qb_demo() -> anyhow::Result<()> {
         .connect(&url)
         .await?;
 
+    let mut qb = QB::<UserModel>::new(&pool); // create QB instance
+    
     // INSERT new user.
     let map = query_map! {
       "name": "Demo User",
       "age": 34
     };
 
-    let mut qb = QB::<UserModel>::new(); // create QB instance 
-    qb.insert(map, &pool).await?; // INSERT INTO users (name, age) VALUES ("Demo User", 34)
+    qb.insert(map).await?; // INSERT INTO users (name, age) VALUES ("Demo User", 34)
 
     // RETRIEVE users. You can use existing QB or create a new one.
     qb.select_all(); // SELECT * FROM users (This returns all users in Vec<UserModel>);
@@ -70,13 +71,13 @@ async fn qb_demo() -> anyhow::Result<()> {
         .with_limit(1); // query LIMIT (always add this if you want to call the 'select' method to retrieve a single model);
 
     qb.set_modifiers(modifiers); // SELECT * FROM users WHERE id = 4 AND age = 32 OR public_id = some-uuid LIMIT 1;
-    qb.select(&pool).await?; // This returns a single UserModel
+    qb.select().await?; // This returns a single UserModel
 
     // You can clear the modifiers at any time
     qb.reset_modifiers();
 
     // What if you only need to get specific fields of the model?
-    let (id, name) = qb.select_fields(vec!["id", "name"], &pool).await?;
+    let (id, name) = qb.select_fields(vec!["id", "name"]).await?;
 
     // Time to UPDATE a user
     let map = query_map! {
@@ -84,10 +85,10 @@ async fn qb_demo() -> anyhow::Result<()> {
       "age": 52
     };
 
-    qb.update(map, &pool).await?;
+    qb.update(map).await?;
 
     // DELETE user
-    qb.delete(&pool).await?;
+    qb.delete().await?;
 
     Ok(())
 }
