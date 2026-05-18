@@ -30,8 +30,9 @@ Follow the steps in this sample code to start using QB:
 use sqlx::FromRow;
 use sqlx_qb::prelude::*;
 
-// 1. Your model must derive FromRow
-#[derive(FromRow)]
+// 1. Your model must derive QbModel and FromRow
+#[derive(QbModel, FromRow)]
+#[model(table_name = "users")] // If table name is not provided, we'll use snake_case of your model's identifier.
 struct UserModel {
     id: i32,
     name: String,
@@ -40,12 +41,8 @@ struct UserModel {
     created_at: Datetime<Utc>
 }
 
-// 2. Implement qb's Model for your model to provide a table name (and other auto-implemented methods). This step won't be necessary in future updates;
-impl Model for UserModel {
-    const TABLE_NAME: &'static str = "users";
-}
 
-// 3. Start using QB. This function demonstrates how to use QB.
+// 2. Start using QB. This function demonstrates how to use QB.
 async fn qb_demo() -> anyhow::Result<()> {
     // create sqlx pool by yourself (I'm deliberately leaving this up to you)
     let pool = PgPoolOptions::new()
