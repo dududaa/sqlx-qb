@@ -898,6 +898,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "qb_macro"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "quote"
 version = "1.0.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1342,6 +1351,7 @@ name = "sqlx_qb"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "qb_macro",
  "sqlx",
  "tokio",
  "uuid",

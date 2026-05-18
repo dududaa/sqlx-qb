@@ -7,7 +7,7 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as syn::DeriveInput);
     let ident = &input.ident;
 
-    let mut table_name = ident.to_string().to_lowercase();
+    let mut table_name = to_snake_case(&ident.to_string());
     for attr in &input.attrs {
         if attr.path().is_ident("model") {
             let _ = attr.parse_nested_meta(|meta| {
@@ -32,4 +32,27 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
     };
 
     TokenStream::from(expanded)
+}
+
+fn to_snake_case(name: &str) -> String {
+    let mut snake_case = String::new();
+    for (i, c) in name.chars().enumerate() {
+        if c.is_uppercase() && i > 0 {
+            snake_case.push('_');
+        }
+
+        snake_case.push(c.to_ascii_lowercase());
+    }
+
+    snake_case
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::to_snake_case;
+
+    #[test]
+    fn test_snake_case() {
+        assert_eq!("foo_bar".to_string(), to_snake_case("FooBar"));
+    }
 }

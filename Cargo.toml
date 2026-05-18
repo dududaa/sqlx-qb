@@ -24,6 +24,7 @@ chrono = ["sqlx/chrono"]
 sqlx = { version = "0.8", default-features = false }
 uuid = { version = "1.23.1", features = ["v4"] }
 chrono = "0.4.44"
+qb_macro = { path = "qb_macro" }
 
 [dev-dependencies]
 sqlx = { version = "0.8.6", features = ["sqlite", "runtime-tokio"] }

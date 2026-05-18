@@ -12,6 +12,8 @@ pub mod prelude {
     pub use crate::query_map;
     pub use crate::query_sort;
     pub use crate::QB;
+    pub use qb_macro::QbModel;
+    pub use sqlx::FromRow;
 }
 
 #[cfg(feature = "postgres")]
@@ -380,12 +382,9 @@ mod tests {
     use std::str::FromStr;
     use uuid::Uuid;
 
-    #[derive(FromRow)]
+    #[derive(QbModel, FromRow)]
+    #[model(table_name = "users")]
     struct TestUserModel {}
-
-    impl Model for TestUserModel {
-        const TABLE_NAME: &'static str = "users";
-    }
 
     async fn pool() -> SqlitePool {
         let connection_options = SqliteConnectOptions::from_str("file::memory:?cache=shared")
