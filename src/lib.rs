@@ -29,7 +29,7 @@ use modifiers::QueryModifiers;
 use sqlx::{Database, Decode, Encode, FromRow, Pool, Type};
 use std::fmt::{Display, Formatter};
 use std::marker::PhantomData;
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 
 pub type DbPool = Pool<QbEngine>;
 
@@ -153,6 +153,12 @@ impl<'q, M: Model> Deref for QB<'q, M> {
 
     fn deref(&self) -> &Self::Target {
         &self.inner
+    }
+}
+
+impl<'q, M: Model> DerefMut for QB<'q, M> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
     }
 }
 
@@ -405,7 +411,8 @@ mod tests {
           "age": 34
         };
 
-        let mut qb = QB::<TestUserModel>::new(&pool).with_modifiers(&modifiers);
+        let mut qb = QB::<TestUserModel>::new(&pool);
+        qb.set_modifiers(&modifiers);
         qb.update(set).await.ok();
 
         assert_eq!(
