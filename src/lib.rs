@@ -3,7 +3,9 @@ mod map;
 mod model;
 mod modifiers;
 mod query;
+mod types;
 mod value;
+
 pub mod prelude {
     pub use crate::extensions::*;
     pub use crate::map::*;
@@ -16,29 +18,7 @@ pub mod prelude {
     pub use sqlx::FromRow;
 }
 
-#[cfg(feature = "postgres")]
-type QbEngine = Postgres;
-
-#[cfg(feature = "mysql")]
-type QbEngine = MySql;
-
-#[cfg(feature = "sqlite")]
-type QbEngine = Sqlite;
-
-#[cfg(feature = "any")]
-type QbEngine = sqlx::Any;
-
-#[cfg(feature = "postgres")]
-type QbResult = PgQueryResult;
-
-#[cfg(feature = "mysql")]
-type QbResult = MySqlQueryResult;
-
-#[cfg(feature = "sqlite")]
-type QbResult = SqliteQueryResult;
-
-#[cfg(feature = "any")]
-type QbResult = AnyQueryResult;
+use types::*;
 
 use crate::model::Model;
 use crate::query::{Query, QueryAs, QueryScalar, QueryWrapper};
@@ -49,45 +29,37 @@ use std::fmt::{Display, Formatter};
 use std::marker::PhantomData;
 use std::ops::Deref;
 
-#[cfg(feature = "postgres")]
-use sqlx::postgres::{PgQueryResult, Postgres};
-
-#[cfg(feature = "mysql")]
-use sqlx::mysql::{MySql, MySqlQueryResult};
-
-#[cfg(feature = "sqlite")]
-use sqlx::sqlite::{Sqlite, SqliteQueryResult};
-
-#[cfg(feature = "any")]
-use sqlx::any::{Any, AnyQueryResult};
+pub type DbPool = Pool<QbEngine>;
 
 pub struct QB<'q, M: Model> {
     inner: SqlxQb<'q>,
+    pool: &'q DbPool,
     _model: PhantomData<M>,
 }
 
 impl<'q, M: Model> QB<'q, M> {
-    pub fn new() -> Self {
+    pub fn new(pool: &'q DbPool) -> Self {
         Self {
             inner: SqlxQb::default(),
             _model: PhantomData::default(),
+            pool,
         }
+    }
+
+    pub fn pool(&self) -> &'q DbPool {
+        self.pool
     }
 
     pub fn sql_str(&self) -> String {
         self.inner.sql_str()
     }
 
-    pub async fn insert(
-        &mut self,
-        map: QueryMap<'q>,
-        db_pool: &DbPool,
-    ) -> Result<QbResult, sqlx::Error> {
+    pub async fn insert(&mut self, map: QueryMap<'q>) -> Result<QbResult, sqlx::Error> {
         self.with_command(QueryCommand::Insert(M::TABLE_NAME, map));
         let modifiers = self.modifiers;
         self.reset_modifiers();
 
-        let result = M::insert(self, db_pool).await;
+        let result = M::insert(self).await;
         if let Some(modifiers) = modifiers {
             self.inner.set_modifiers(modifiers);
         }
@@ -95,29 +67,25 @@ impl<'q, M: Model> QB<'q, M> {
         result
     }
 
-    pub async fn select(&mut self, db_pool: &DbPool) -> Result<M, sqlx::Error> {
+    pub async fn select(&mut self) -> Result<M, sqlx::Error> {
         self.with_command(QueryCommand::Select(
             QuerySelectCommand::WildCard,
             M::TABLE_NAME,
         ));
 
-        M::select(&self, db_pool).await
+        M::select(self).await
     }
 
-    pub async fn select_all(&mut self, db_pool: &DbPool) -> Result<Vec<M>, sqlx::Error> {
+    pub async fn select_all(&mut self) -> Result<Vec<M>, sqlx::Error> {
         self.with_command(QueryCommand::Select(
             QuerySelectCommand::WildCard,
             M::TABLE_NAME,
         ));
 
-        M::select_all(self, db_pool).await
+        M::select_all(self).await
     }
 
-    pub async fn select_fields<R>(
-        &mut self,
-        fields: Vec<&'q str>,
-        db_pool: &DbPool,
-    ) -> Result<R, sqlx::Error>
+    pub async fn select_fields<R>(&mut self, fields: Vec<&'q str>) -> Result<R, sqlx::Error>
     where
         R: Send + Unpin + for<'r> FromRow<'r, <QbEngine as Database>::Row>,
     {
@@ -126,13 +94,12 @@ impl<'q, M: Model> QB<'q, M> {
             M::TABLE_NAME,
         ));
 
-        M::select_fields(self, db_pool).await
+        M::select_fields(self).await
     }
 
     pub async fn select_fields_all<R>(
         &mut self,
         fields: Vec<&'q str>,
-        db_pool: &DbPool,
     ) -> Result<Vec<R>, sqlx::Error>
     where
         R: Send + Unpin + for<'r> FromRow<'r, <QbEngine as Database>::Row>,
@@ -142,21 +109,17 @@ impl<'q, M: Model> QB<'q, M> {
             M::TABLE_NAME,
         ));
 
-        M::select_fields_all(self, db_pool).await
+        M::select_fields_all(self).await
     }
 
-    pub async fn update(
-        &mut self,
-        set: QueryMap<'q>,
-        db_pool: &DbPool,
-    ) -> Result<QbResult, sqlx::Error> {
+    pub async fn update(&mut self, set: QueryMap<'q>) -> Result<QbResult, sqlx::Error> {
         self.with_command(QueryCommand::Update(M::TABLE_NAME, set));
-        M::update(self, db_pool).await
+        M::update(self).await
     }
 
-    pub async fn delete(&mut self, db_pool: &DbPool) -> Result<QbResult, sqlx::Error> {
+    pub async fn delete(&mut self) -> Result<QbResult, sqlx::Error> {
         self.with_command(QueryCommand::Delete(M::TABLE_NAME));
-        M::delete(self, db_pool).await
+        M::delete(self).await
     }
 
     pub fn with_modifiers(mut self, modifiers: &'q QueryModifiers<'q>) -> Self {
@@ -180,8 +143,6 @@ impl<'q, M: Model> Deref for QB<'q, M> {
         &self.inner
     }
 }
-
-pub type DbPool = Pool<QbEngine>;
 
 pub struct SqlxQb<'q> {
     cmd: QueryCommand<'q>,
@@ -407,8 +368,8 @@ mod tests {
             .or(eq("pid", "some-pid"))
             .with_limit(1);
 
-        let mut qb = QB::<TestUserModel>::new().with_modifiers(&modifiers);
-        qb.select(&pool).await.ok();
+        let mut qb = QB::<TestUserModel>::new(&pool).with_modifiers(&modifiers);
+        qb.select().await.ok();
 
         assert_eq!(
             qb.sql_str(),
@@ -430,8 +391,8 @@ mod tests {
           "age": 34
         };
 
-        let mut qb = QB::<TestUserModel>::new().with_modifiers(&modifiers);
-        qb.update(set, &pool).await.ok();
+        let mut qb = QB::<TestUserModel>::new(&pool).with_modifiers(&modifiers);
+        qb.update(set).await.ok();
 
         assert_eq!(
             qb.sql_str(),
@@ -447,8 +408,8 @@ mod tests {
           "age": 34
         };
 
-        let mut qb = QB::<TestUserModel>::new();
-        qb.insert(map, &pool).await.ok();
+        let mut qb = QB::<TestUserModel>::new(&pool);
+        qb.insert(map).await.ok();
 
         assert_eq!(
             qb.sql_str(),
@@ -462,8 +423,8 @@ mod tests {
         let modifiers =
             QueryModifiers::new().with_sort(query_sort!(QuerySortDir::DESC, "created_at"));
 
-        let mut qb = QB::<TestUserModel>::new().with_modifiers(&modifiers);
-        qb.select(&pool).await.ok();
+        let mut qb = QB::<TestUserModel>::new(&pool).with_modifiers(&modifiers);
+        qb.select().await.ok();
 
         assert_eq!(qb.sql_str(), "SELECT * FROM users ORDER BY created_at DESC");
     }
