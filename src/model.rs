@@ -6,7 +6,7 @@ use std::future::Future;
 
 pub trait Model: Sized + Send + Unpin + for<'r> FromRow<'r, <QbEngine as Database>::Row> {
     const TABLE_NAME: &'static str;
-    const DEFAULT_RETRIEVE_COLUMN: &'static str = "id";
+    const PRIMARY_COLUMN: &'static str;
     type InsertReturns;
 
     fn insert<'q>(
@@ -22,7 +22,7 @@ pub trait Model: Sized + Send + Unpin + for<'r> FromRow<'r, <QbEngine as Databas
             let sql = format!(
                 "SELECT * FROM {} WHERE {} = {} LIMIT 1",
                 Self::TABLE_NAME,
-                Self::DEFAULT_RETRIEVE_COLUMN,
+                Self::PRIMARY_COLUMN,
                 arg
             );
             let query = QueryAs::new(&sql);

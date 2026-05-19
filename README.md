@@ -31,8 +31,14 @@ You can start using Sqlx-QB in two simple steps:
 ```rust
 use sqlx_qb::prelude::*;
 
+/// (Optionally) provide the table name, otherwise the model's identifier will be used in snake_case, 
+/// e.g, "user_model" here.
+///
+/// (Optionally) provide the table's primary column. This is especially useful to call `get` method which retrieves 
+/// just one row of the table. The default primary_column is "id".
 #[derive(QbModel, FromRow)]
-#[model(table_name = "users")] // If table name is not provided, we'll use snake_case of your model's identifier.
+#[model(table_name = "users")]
+#[model(primary_column = "id")]
 struct UserModel {
     id: i32,
     name: String,
@@ -124,6 +130,9 @@ async fn main() -> anyhow::Result<()> {
 
     // What if you only need to get specific fields of the model?
     let (id, name) = qb.select_fields(["id", "name"]).await?;
+    
+    // There's a simple get method that simply retrieves one row using the specified primary column.
+    let user = qb.get().await?;
 }
 ```
 

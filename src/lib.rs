@@ -24,13 +24,13 @@ use types::*;
 
 use crate::model::{Model, ModelInsertArg};
 use crate::query::{Query, QueryAs, QueryScalar, QueryWrapper};
+use crate::value::QbValue;
 use map::QueryMap;
 use modifiers::QueryModifiers;
 use sqlx::{Database, Decode, Encode, FromRow, Pool, Type};
 use std::fmt::{Display, Formatter};
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
-use crate::value::QbValue;
 
 pub type DbPool = Pool<QbEngine>;
 
@@ -57,6 +57,11 @@ impl<'q, M: Model> QB<'q, M> {
         self.inner.sql_str()
     }
 
+    /// Retrieves a single row from the table using the [PRIMARY COLUMN](Model::PRIMARY_COLUMN) specified for the model.
+    pub async fn get(&self, value: impl Into<QbValue<'q>>) -> Result<M, sqlx::Error> {
+        M::get(self, value.into()).await
+    }
+    
     pub async fn insert(&mut self, map: QueryMap<'q>) -> Result<M::InsertReturns, sqlx::Error> {
         self.with_command(QueryCommand::Insert(M::TABLE_NAME, map));
         let modifiers = self.modifiers;

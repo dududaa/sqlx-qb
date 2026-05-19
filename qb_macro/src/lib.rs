@@ -8,15 +8,22 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
     let ident = &input.ident;
 
     let mut table_name = to_snake_case(&ident.to_string());
+    let mut primary_column = String::from("id");
+
     for attr in &input.attrs {
         if attr.path().is_ident("model") {
             let _ = attr.parse_nested_meta(|meta| {
-                if meta.path.is_ident("table_name") {
+                if meta.path.is_ident("table_name") || meta.path.is_ident("primary_column") {
                     let value = meta.value()?;
                     if let Expr::Lit(expr_lit) = value.parse::<Expr>()?
                         && let Lit::Str(lit_str) = expr_lit.lit
                     {
-                        table_name = lit_str.value();
+                        let value = lit_str.value();
+                        if value == "primary_column" {
+                            primary_column = value;
+                        } else {
+                            table_name = value;
+                        }
                     }
                 }
 
@@ -28,6 +35,8 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
     let expanded = quote! {
         impl Model for #ident {
             const TABLE_NAME: &'static str = #table_name;
+            const PRIMARY_COLUMN: &'static str = #primary_column;
+
             type InsertReturns = ();
 
             fn insert<'q>(qb: &'q QB<'q, Self>) -> impl Future<Output = Result<Self::InsertReturns, sqlx::Error>> {
