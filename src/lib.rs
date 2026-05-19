@@ -30,6 +30,7 @@ use sqlx::{Database, Decode, Encode, FromRow, Pool, Type};
 use std::fmt::{Display, Formatter};
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
+use crate::value::QbValue;
 
 pub type DbPool = Pool<QbEngine>;
 
@@ -316,11 +317,12 @@ impl<'q> Display for QueryCommand<'q> {
                     .keys()
                     .map(|col| col.to_string())
                     .collect::<Vec<_>>();
+
                 let values = map
                     .inner()
                     .iter()
                     .enumerate()
-                    .map(|(i, _)| format!("${}", i + 1))
+                    .map(|(i, _)| QbValue::arg(i))
                     .collect::<Vec<_>>();
 
                 format!(
@@ -342,7 +344,7 @@ impl<'q> Display for QueryCommand<'q> {
                     .inner()
                     .iter()
                     .enumerate()
-                    .map(|(i, (col, _))| format!("{col} = ${}", i + 1))
+                    .map(|(i, (col, _))| format!("{col} = {}", QbValue::arg(i)))
                     .collect::<Vec<String>>()
                     .join(", ");
 

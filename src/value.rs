@@ -26,6 +26,14 @@ impl<'q> QbValue<'q> {
             QbValue::DateTime(d) => query.bind(d),
         }
     }
+
+    pub(crate) fn arg(idx: usize) -> String {
+        if !cfg!(feature = "mysql") {
+            format!("${}", idx + 1)
+        } else {
+            "?".to_string()
+        }
+    }
 }
 
 impl<'q> From<Uuid> for QbValue<'q> {

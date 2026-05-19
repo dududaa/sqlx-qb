@@ -70,8 +70,10 @@ async fn main() -> anyhow::Result<()> {
     qb.insert(map).await?; // INSERT INTO users (name, age) VALUES ("Demo User", 34)
 }
 ```
+
 We also provide `insert_args` which allows you to insert *your own type* and define how you want it to be inserted.
 The input type must implement `ModelInsertArg<M: Model>`.
+
 ```rust
 // Define input args
 struct UserInsertArgs {
@@ -86,8 +88,8 @@ impl ModelInsertArg<M: Model> for UserInsertArgs {
     fn insert(
         self,
         db_pool: &DbPool,
-    ) -> impl Future<Output = Result<Self::Returns, sqlx::Error>> + Send {
-        async { 
+    ) -> impl Future<Output=Result<Self::Returns, sqlx::Error>> + Send {
+        async {
             let id = sqlx::query_scalar!("INSERT INTO users(name, age) VALUES($1, $2) RETURNING id", &self.name, &self.age).fetch_one(db_pool).await?;
             Ok(id)
         }
@@ -97,7 +99,7 @@ impl ModelInsertArg<M: Model> for UserInsertArgs {
 // Insert the args anywhere
 async fn main() -> anyhow::Result<()> {
     // ...
-    let args = UserInsertArgs{..};
+    let args = UserInsertArgs { .. };
     let id = qb.insert_args(args).await?;
 }
 ```
@@ -128,11 +130,12 @@ async fn main() -> anyhow::Result<()> {
 ###### More on modifiers
 
 Be careful with Modifiers! The same modifiers will be used across multiple operations of **the same** `QB` instance. If
-you're unsure whether current modifiers match your current query, you can either `reset_modifiers` to remove them or update
+you're unsure whether current modifiers match your current query, you can either `reset_modifiers` to remove them or
+update
 them with `set_modifiers`.
 
 ```rust
-    async fn main() -> anyhow::Result<()> {
+async fn main() -> anyhow::Result<()> {
     // ...
     // You can clear the modifiers at any time
     qb.reset_modifiers();
