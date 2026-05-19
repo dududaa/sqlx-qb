@@ -128,7 +128,7 @@ async fn main() -> anyhow::Result<()> {
 ###### More on modifiers
 
 Be careful with Modifiers! The same modifiers will be used across multiple operations of **the same** `QB` instance. If
-you're unsure if current modifiers match your current query, you can either `reset_modifiers` to remove them or update
+you're unsure whether current modifiers match your current query, you can either `reset_modifiers` to remove them or update
 them with `set_modifiers`.
 
 ```rust
