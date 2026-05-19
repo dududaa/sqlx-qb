@@ -61,7 +61,7 @@ impl<'q, M: Model> QB<'q, M> {
     pub async fn get(&self, value: impl Into<QbValue<'q>>) -> Result<M, sqlx::Error> {
         M::get(self, value.into()).await
     }
-    
+
     pub async fn insert(&mut self, map: QueryMap<'q>) -> Result<M::InsertReturns, sqlx::Error> {
         self.with_command(QueryCommand::Insert(M::TABLE_NAME, map));
         let modifiers = self.modifiers;
