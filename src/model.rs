@@ -1,12 +1,36 @@
+use crate::query::{QueryAs, QueryWrapper};
+use crate::value::QbValue;
 use crate::{DbPool, QbEngine, QbResult, QB};
 use sqlx::{Database, FromRow};
 use std::future::Future;
 
 pub trait Model: Sized + Send + Unpin + for<'r> FromRow<'r, <QbEngine as Database>::Row> {
     const TABLE_NAME: &'static str;
+    const DEFAULT_RETRIEVE_COLUMN: &'static str = "id";
     type InsertReturns;
 
-    fn insert<'q>(qb: &'q QB<'q, Self>) -> impl Future<Output = Result<Self::InsertReturns, sqlx::Error>>;
+    fn insert<'q>(
+        qb: &'q QB<'q, Self>,
+    ) -> impl Future<Output = Result<Self::InsertReturns, sqlx::Error>>;
+
+    fn get<'q>(
+        qb: &'q QB<'q, Self>,
+        value: QbValue<'q>,
+    ) -> impl Future<Output = Result<Self, sqlx::Error>> {
+        async {
+            let arg = QbValue::arg(0);
+            let sql = format!(
+                "SELECT * FROM {} WHERE {} = {} LIMIT 1",
+                Self::TABLE_NAME,
+                Self::DEFAULT_RETRIEVE_COLUMN,
+                arg
+            );
+            let query = QueryAs::new(&sql);
+
+            let model = value.bind(query).into_inner().fetch_one(qb.pool()).await?;
+            Ok(model)
+        }
+    }
 
     fn select<'q>(qb: &'q QB<'q, Self>) -> impl Future<Output = Result<Self, sqlx::Error>> {
         async { qb.fetch_one(qb.pool()).await }
