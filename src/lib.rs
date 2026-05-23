@@ -130,6 +130,34 @@ impl<'q, M: Model> QB<'q, M> {
         M::select_fields_all(self).await
     }
 
+    pub async fn select_scalar<R>(&mut self, field: &'q str) -> Result<R, sqlx::Error>
+    where
+        R: Send + Unpin,
+        R: for<'r> Encode<'r, QbEngine> + for<'r> Decode<'r, QbEngine> + Type<QbEngine>,
+        (R,): for<'r> FromRow<'r, <QbEngine as Database>::Row>,
+    {
+        self.with_command(QueryCommand::Select(
+            QuerySelectCommand::Fields([field].into()),
+            M::TABLE_NAME,
+        ));
+
+        M::select_scalar(self).await
+    }
+
+    pub async fn select_scalar_all<R>(&mut self, field: &'q str) -> Result<Vec<R>, sqlx::Error>
+    where
+        R: Send + Unpin,
+        R: for<'r> Encode<'r, QbEngine> + for<'r> Decode<'r, QbEngine> + Type<QbEngine>,
+        (R,): for<'r> FromRow<'r, <QbEngine as Database>::Row>,
+    {
+        self.with_command(QueryCommand::Select(
+            QuerySelectCommand::Fields([field].into()),
+            M::TABLE_NAME,
+        ));
+
+        M::select_scalar_all(self).await
+    }
+
     pub async fn update(&mut self, set: QueryMap<'q>) -> Result<QbResult, sqlx::Error> {
         self.with_command(QueryCommand::Update(M::TABLE_NAME, set));
         M::update(self).await
@@ -232,7 +260,6 @@ impl<'q> SqlxQb<'q> {
         query.fetch_all(db_pool).await
     }
 
-    #[allow(dead_code)]
     pub(crate) async fn fetch_scalar_one<R>(&self, db_pool: &DbPool) -> Result<R, sqlx::Error>
     where
         R: Send + Unpin,
@@ -246,7 +273,6 @@ impl<'q> SqlxQb<'q> {
         query.fetch_one(db_pool).await
     }
 
-    #[allow(dead_code)]
     pub(crate) async fn fetch_scalar_all<R>(&self, db_pool: &DbPool) -> Result<Vec<R>, sqlx::Error>
     where
         R: Send + Unpin,

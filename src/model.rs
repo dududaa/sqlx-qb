@@ -1,7 +1,7 @@
 use crate::query::{QueryAs, QueryWrapper};
 use crate::value::QbValue;
 use crate::{DbPool, QbEngine, QbResult, QB};
-use sqlx::{Database, FromRow};
+use sqlx::{Database, Decode, Encode, FromRow, Type};
 use std::future::Future;
 
 pub trait Model: Sized + Send + Unpin + for<'r> FromRow<'r, <QbEngine as Database>::Row> {
@@ -56,6 +56,26 @@ pub trait Model: Sized + Send + Unpin + for<'r> FromRow<'r, <QbEngine as Databas
         R: Send + Unpin + for<'r> FromRow<'r, <QbEngine as Database>::Row>,
     {
         async { qb.fetch_fields_all(qb.pool()).await }
+    }
+
+    fn select_scalar<'q, R>(qb: &'q QB<'q, Self>) -> impl Future<Output = Result<R, sqlx::Error>>
+    where
+        R: Send + Unpin,
+        R: for<'r> Encode<'r, QbEngine> + for<'r> Decode<'r, QbEngine> + Type<QbEngine>,
+        (R,): for<'r> FromRow<'r, <QbEngine as Database>::Row>,
+    {
+        async { qb.fetch_scalar_one(qb.pool()).await }
+    }
+
+    fn select_scalar_all<'q, R>(
+        qb: &'q QB<'q, Self>,
+    ) -> impl Future<Output = Result<Vec<R>, sqlx::Error>>
+    where
+        R: Send + Unpin,
+        R: for<'r> Encode<'r, QbEngine> + for<'r> Decode<'r, QbEngine> + Type<QbEngine>,
+        (R,): for<'r> FromRow<'r, <QbEngine as Database>::Row>,
+    {
+        async { qb.fetch_scalar_all(qb.pool()).await }
     }
 
     fn update<'q>(qb: &'q QB<'q, Self>) -> impl Future<Output = Result<QbResult, sqlx::Error>> {
