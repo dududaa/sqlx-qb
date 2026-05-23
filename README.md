@@ -129,7 +129,8 @@ async fn main() -> anyhow::Result<()> {
     qb.select().await?; // This returns a single UserModel
 
     // What if you only need to get specific fields of the model?
-    let (id, name) = qb.select_fields(["id", "name"]).await?;
+    let total_rows = qb.select_scalar("Count(*)").await?; // select one field
+    let (id, name) = qb.select_fields(["id", "name"]).await?; // select multiple fields
     
     // There's a simple get method that simply retrieves one row using the specified primary column.
     let user = qb.get().await?;
