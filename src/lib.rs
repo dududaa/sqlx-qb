@@ -392,24 +392,31 @@ impl<'q> Display for QueryCommand<'q> {
 mod tests {
     use crate::prelude::*;
     use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
-    use sqlx::{FromRow, SqlitePool};
+    use sqlx::{AnyPool, FromRow, SqlitePool};
     use std::str::FromStr;
+    use sqlx::any::AnyPoolOptions;
     use uuid::Uuid;
 
     #[derive(QbModel, FromRow)]
     #[model(table_name = "users")]
     struct TestUserModel {}
 
-    async fn pool() -> SqlitePool {
-        let connection_options = SqliteConnectOptions::from_str("file::memory:?cache=shared")
-            .unwrap()
-            .create_if_missing(true);
+    async fn pool() -> AnyPool {
+        // let connection_options = SqliteConnectOptions::from_str("file::memory:?cache=shared")
+        //     .unwrap()
+        //     .create_if_missing(true);
+        //
+        // SqlitePoolOptions::new()
+        //     .max_connections(1)
+        //     .connect_with(connection_options)
+        //     .await
+        //     .unwrap()
 
-        SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect_with(connection_options)
-            .await
-            .unwrap()
+        #[cfg(feature = "any")]
+        AnyPoolOptions::new()
+            .max_connections(5)
+            .connect("test")
+            .await.unwrap()
     }
 
     #[tokio::test]
