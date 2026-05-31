@@ -1,5 +1,9 @@
 use crate::query::QueryWrapper;
+
+#[cfg(feature = "chrono")]
 use chrono::{DateTime, Utc};
+
+#[cfg(feature = "uuid")]
 use uuid::Uuid;
 
 #[derive(Clone)]
@@ -21,8 +25,12 @@ impl<'q> QbValue<'q> {
             QbValue::SmallInt(i) => query.bind(i),
             QbValue::Int(i) => query.bind(i),
             QbValue::BigInt(b) => query.bind(b),
-            QbValue::Uuid(u) => query.bind(u),
             QbValue::Text(s) => query.bind(s),
+
+            #[cfg(feature = "uuid")]
+            QbValue::Uuid(u) => query.bind(u),
+
+            #[cfg(feature = "uuid")]
             QbValue::DateTime(d) => query.bind(d),
         }
     }
@@ -36,6 +44,7 @@ impl<'q> QbValue<'q> {
     }
 }
 
+#[cfg(feature = "uuid")]
 impl<'q> From<Uuid> for QbValue<'q> {
     fn from(uuid: Uuid) -> Self {
         QbValue::Uuid(uuid)
@@ -66,6 +75,7 @@ impl<'q> From<i16> for QbValue<'q> {
     }
 }
 
+#[cfg(feature = "chrono")]
 impl<'q> From<DateTime<Utc>> for QbValue<'q> {
     fn from(dt: DateTime<Utc>) -> Self {
         QbValue::DateTime(dt)
