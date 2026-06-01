@@ -76,7 +76,7 @@ where
     pub async fn insert_args<M, A>(&self, args: A) -> Result<A::Returns, Error>
     where
         M: Model,
-        A: ModelInsertArg<'q, M, DB, E>,
+        A: ModelInsertArg<M>,
     {
         args.insert(self.pool.clone()).await
     }
