@@ -3,7 +3,7 @@ mod map;
 mod model;
 mod modifiers;
 mod query;
-mod types;
+// mod types;
 // mod value;
 
 pub mod prelude {
@@ -13,24 +13,20 @@ pub mod prelude {
     pub use crate::modifiers::*;
     pub use crate::query_map;
     pub use crate::query_sort;
-    pub use crate::DbPool;
     pub use crate::QB;
     pub use qb_macro::QbModel;
-    pub use sqlx::{FromRow, Database, Executor, IntoArguments};
+    pub use sqlx::{Database, Executor, FromRow, IntoArguments};
     pub use std::future::Future;
 }
 
-use types::*;
 
 use crate::model::{Model, ModelInsertArg};
 use crate::query::{Query, QueryAs, QueryScalar};
 use map::QueryMap;
 use modifiers::QueryModifiers;
-use sqlx::{Database, Decode, Encode, Error, Executor, FromRow, IntoArguments, Pool, Type};
+use sqlx::{Database, Decode, Encode, Error, Executor, FromRow, IntoArguments, Type};
 use std::fmt::{Display, Formatter};
 use std::ops::{Deref, DerefMut};
-
-pub type DbPool = Pool<QbEngine>;
 
 pub struct QB<'q, DB, P>
 where
@@ -448,32 +444,27 @@ impl<'q> Display for QueryCommand<'q> {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
     use crate::prelude::*;
-    use sqlx::any::AnyPoolOptions;
-    use sqlx::{AnyPool, FromRow};
+    use sqlx::{FromRow, SqlitePool};
+    use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
     use uuid::Uuid;
 
     #[derive(QbModel, FromRow)]
     #[model(table_name = "users")]
     struct TestUserModel {}
 
-    async fn pool() -> AnyPool {
-        // let connection_options = SqliteConnectOptions::from_str("file::memory:?cache=shared")
-        //     .unwrap()
-        //     .create_if_missing(true);
-        //
-        // SqlitePoolOptions::new()
-        //     .max_connections(1)
-        //     .connect_with(connection_options)
-        //     .await
-        //     .unwrap()
+    async fn pool() -> SqlitePool {
+        let connection_options = SqliteConnectOptions::from_str("file::memory:?cache=shared")
+            .unwrap()
+            .create_if_missing(true);
 
-        #[cfg(feature = "any")]
-        AnyPoolOptions::new()
-            .max_connections(5)
-            .connect("test")
+        SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(connection_options)
             .await
             .unwrap()
+
     }
 
     #[tokio::test]
