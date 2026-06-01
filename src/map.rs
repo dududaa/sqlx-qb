@@ -1,19 +1,28 @@
-use crate::value::QbValue;
 use std::collections::BTreeMap;
+use std::fmt::Display;
 
-pub struct QueryMap<'q>(BTreeMap<&'q str, QbValue<'q>>);
+#[derive(Clone)]
+pub struct QueryMap<'q>(BTreeMap<&'q str, String>);
 
 impl<'q> QueryMap<'q> {
     pub fn new() -> Self {
         let map = BTreeMap::new();
         QueryMap(map)
     }
-    pub fn add(&mut self, key: &'q str, value: impl Into<QbValue<'q>>) {
-        self.0.insert(key, value.into());
+    pub fn add(&mut self, key: &'q str, value: impl Display) {
+        self.0.insert(key, value.to_string());
     }
 
-    pub(crate) fn inner(&self) -> &BTreeMap<&'q str, QbValue<'q>> {
+    pub(crate) fn inner(&self) -> &BTreeMap<&'q str, String> {
         &self.0
+    }
+
+    pub(crate) fn arg(idx: usize) -> String {
+        if !cfg!(feature = "mysql") {
+            format!("${}", idx + 1)
+        } else {
+            "?".to_string()
+        }
     }
 }
 

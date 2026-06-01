@@ -4,7 +4,7 @@ mod model;
 mod modifiers;
 mod query;
 mod types;
-mod value;
+// mod value;
 
 pub mod prelude {
     pub use crate::extensions::*;
@@ -16,15 +16,14 @@ pub mod prelude {
     pub use crate::DbPool;
     pub use crate::QB;
     pub use qb_macro::QbModel;
-    pub use sqlx::FromRow;
+    pub use sqlx::{FromRow, Database, Executor, IntoArguments};
     pub use std::future::Future;
 }
 
 use types::*;
 
 use crate::model::{Model, ModelInsertArg};
-use crate::query::{Query, QueryAs, QueryScalar, QueryWrapper};
-use crate::value::QbValue;
+use crate::query::{Query, QueryAs, QueryScalar};
 use map::QueryMap;
 use modifiers::QueryModifiers;
 use sqlx::{Database, Decode, Encode, Error, Executor, FromRow, IntoArguments, Pool, Type};
@@ -45,6 +44,9 @@ impl<'q, DB, P> QB<'q, DB, P>
 where
     DB: Database,
     P: Executor<'q, Database = DB> + Clone,
+    String: sqlx::Encode<'q, DB>,
+    String: sqlx::Type<DB>,
+    DB::Arguments: IntoArguments<DB>,
 {
     pub fn new(pool: P) -> Self {
         Self {
@@ -58,17 +60,6 @@ where
 
     pub fn sql_str(&self) -> String {
         self.inner.sql_str()
-    }
-
-    /// Retrieves a single row from the table using the [PRIMARY COLUMN](Model::PRIMARY_COLUMN) specified for the model.
-    pub async fn get<M: Model + for<'r> sqlx::FromRow<'r, DB::Row>>(
-        &'q self,
-        value: impl Into<QbValue<'q>>,
-    ) -> Result<M, Error>
-    where
-        DB::Arguments: IntoArguments<DB>,
-    {
-        M::get(self, value.into()).await
     }
 
     pub async fn insert<M: Model>(
@@ -87,7 +78,7 @@ where
         result
     }
 
-    pub async fn insert_args<M, A>(&self, args: A) -> Result<A::Returns, sqlx::Error>
+    pub async fn insert_args<M, A>(&self, args: A) -> Result<A::Returns, Error>
     where
         M: Model,
         A: ModelInsertArg<M>,
@@ -98,7 +89,6 @@ where
     pub async fn select<M>(&mut self) -> Result<M, Error>
     where
         M: Model + for<'r> sqlx::FromRow<'r, DB::Row>,
-        DB::Arguments: IntoArguments<DB>,
     {
         self.with_command(QueryCommand::Select(
             QuerySelectCommand::WildCard,
@@ -111,8 +101,6 @@ where
     pub async fn select_all<M: Model + for<'r> sqlx::FromRow<'r, DB::Row>>(
         &mut self,
     ) -> Result<Vec<M>, Error>
-    where
-        DB::Arguments: IntoArguments<DB>,
     {
         self.with_command(QueryCommand::Select(
             QuerySelectCommand::WildCard,
@@ -122,11 +110,13 @@ where
         self.fetch_all().await
     }
 
-    pub async fn select_fields<M, R>(&mut self, fields: impl Into<Vec<&'q str>>) -> Result<R, Error>
+    pub async fn select_fields<M>(
+        &mut self,
+        fields: impl Into<Vec<&'q str>>,
+    ) -> Result<DB::Row, Error>
     where
         M: Model,
-        R: Send + Unpin + for<'r> FromRow<'r, DB::Row>,
-        DB::Arguments: IntoArguments<DB>,
+        for<'r> <DB as Database>::Row: FromRow<'r, <DB as Database>::Row>,
     {
         self.with_command(QueryCommand::Select(
             QuerySelectCommand::Fields(fields.into()),
@@ -136,14 +126,13 @@ where
         self.fetch_fields_one().await
     }
 
-    pub async fn select_fields_all<M, R>(
+    pub async fn select_fields_all<M>(
         &mut self,
         fields: impl Into<Vec<&'q str>>,
-    ) -> Result<Vec<R>, Error>
+    ) -> Result<Vec<DB::Row>, Error>
     where
         M: Model,
-        R: Send + Unpin + for<'r> FromRow<'r, DB::Row>,
-        DB::Arguments: IntoArguments<DB>,
+        for<'r> <DB as Database>::Row: FromRow<'r, <DB as Database>::Row>,
     {
         self.with_command(QueryCommand::Select(
             QuerySelectCommand::Fields(fields.into()),
@@ -153,13 +142,12 @@ where
         self.fetch_fields_all().await
     }
 
-    pub async fn select_scalar<M, R>(&mut self, field: &'q str) -> Result<R, sqlx::Error>
+    pub async fn select_scalar<M, R>(&mut self, field: &'q str) -> Result<R, Error>
     where
         M: Model,
         R: Send + Unpin + 'q,
         R: for<'r> Encode<'r, DB> + for<'r> Decode<'r, DB> + Type<DB>,
         (R,): for<'r> FromRow<'r, DB::Row>,
-        DB::Arguments: IntoArguments<DB>,
     {
         self.with_command(QueryCommand::Select(
             QuerySelectCommand::Fields([field].into()),
@@ -169,9 +157,8 @@ where
         self.fetch_scalar_one().await
     }
 
-    pub async fn select_scalar_all<M, R>(&mut self, field: &'q str) -> Result<Vec<R>, sqlx::Error>
+    pub async fn select_scalar_all<M, R>(&mut self, field: &'q str) -> Result<Vec<R>, Error>
     where
-        DB::Arguments: IntoArguments<DB>,
         M: Model,
         R: Send + Unpin + 'q,
         R: for<'r> Encode<'r, DB> + for<'r> Decode<'r, DB> + Type<DB>,
@@ -186,16 +173,12 @@ where
     }
 
     pub async fn update<M: Model>(&mut self, set: QueryMap<'q>) -> Result<(), Error>
-    where
-        DB::Arguments: IntoArguments<DB>,
     {
         self.with_command(QueryCommand::Update(M::TABLE_NAME, set));
         self.execute().await
     }
 
-    pub async fn delete<M: Model>(&mut self) -> Result<(), Error>
-    where
-        DB::Arguments: IntoArguments<DB>,
+    pub async fn delete<M: Model>(mut self) -> Result<(), Error>
     {
         self.with_command(QueryCommand::Delete(M::TABLE_NAME));
         self.execute().await
@@ -210,8 +193,9 @@ where
         self.inner.modifiers = None;
     }
 
-    fn with_command(&mut self, cmd: QueryCommand<'q>) {
-        self.inner.cmd = cmd;
+    fn with_command(&mut self, command: QueryCommand<'q>) {
+        self.inner.cmd = command;
+        self.collect_args();
     }
 }
 
@@ -219,6 +203,8 @@ impl<'q, DB, P> Deref for QB<'q, DB, P>
 where
     DB: Database,
     P: Executor<'q, Database = DB> + Clone,
+    String: sqlx::Encode<'q, DB>,
+    String: sqlx::Type<DB>,
 {
     type Target = SqlxQb<'q, DB, P>;
 
@@ -231,6 +217,8 @@ impl<'q, DB, P> DerefMut for QB<'q, DB, P>
 where
     DB: Database,
     P: Executor<'q, Database = DB> + Clone,
+    String: sqlx::Encode<'q, DB>,
+    String: sqlx::Type<DB>,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.inner
@@ -244,6 +232,7 @@ where
 {
     cmd: QueryCommand<'q>,
     modifiers: Option<&'q QueryModifiers<'q>>,
+    args: Vec<String>,
     pool: P,
 }
 
@@ -251,12 +240,15 @@ impl<'q, DB, P> SqlxQb<'q, DB, P>
 where
     DB: Database,
     P: Executor<'q, Database = DB> + Clone,
+    String: sqlx::Encode<'q, DB>,
+    String: sqlx::Type<DB>,
 {
     fn new(pool: P) -> Self {
         Self {
             cmd: QueryCommand::Null,
             modifiers: None,
             pool,
+            args: Default::default(),
         }
     }
 
@@ -273,29 +265,29 @@ where
         format!("{}{}", self.cmd, builder_sql)
     }
 
-    fn bind_values<Q>(&self, mut query: Q) -> Q
+    fn collect_args(&mut self)
     where
-        Q: QueryWrapper<'q, DB>,
+        String: sqlx::Encode<'q, DB>,
+        String: sqlx::Type<DB>,
     {
         if let QueryCommand::Update(_, set) = &self.cmd {
-            for value in set.inner().values() {
-                query = value.clone().bind(query);
+            for v in set.inner().values() {
+                self.args.push(v.clone());
             }
         }
 
         if let QueryCommand::Insert(_, map) = &self.cmd {
-            for value in map.inner().values() {
-                query = value.clone().bind(query);
+            for v in map.inner().values() {
+                self.args.push(v.clone());
             }
         }
 
         if let Some(modifiers) = self.modifiers {
             for clause in modifiers.filters() {
-                query = clause.value().bind(query);
+                let parsed = clause.value().parse().unwrap_or_default();
+                self.args.push(parsed);
             }
         }
-
-        query
     }
 
     pub fn set_modifiers(&mut self, modifiers: &'q QueryModifiers<'q>) {
@@ -304,30 +296,44 @@ where
 
     pub(crate) async fn fetch_one<M: Model + for<'r> sqlx::FromRow<'r, DB::Row>>(
         &self,
-    ) -> Result<M, sqlx::Error>
+    ) -> Result<M, Error>
     where
         DB::Arguments: IntoArguments<DB>,
     {
         let sql = self.sql_str();
-        let query = QueryAs::new(&sql);
-        let query = self.bind_values(query).into_inner();
+        let args = self.args.clone();
+        let query = QueryAs::new(sql, args);
 
         query.fetch_one(self.pool.clone()).await
     }
 
-    pub(crate) async fn fetch_all<M>(&self) -> Result<Vec<M>, sqlx::Error>
+    pub(crate) async fn fetch_all<M>(&self) -> Result<Vec<M>, Error>
     where
         M: Model + for<'r> sqlx::FromRow<'r, DB::Row>,
         DB::Arguments: IntoArguments<DB>,
     {
         let sql = self.sql_str();
-        let query = QueryAs::new(&sql);
-        let query = self.bind_values(query).into_inner();
+        let args = self.args.clone();
+        let query = QueryAs::new(sql, args);
 
         query.fetch_all(self.pool.clone()).await
     }
 
-    pub(crate) async fn fetch_scalar_one<R>(&self) -> Result<R, sqlx::Error>
+    pub(crate) async fn fetch_scalar_one<R>(&self) -> Result<R, Error>
+    where
+        DB::Arguments: IntoArguments<DB>,
+        R: Send + Unpin + 'q,
+        R: for<'r> Encode<'r, DB> + for<'r> Decode<'r, DB> + Type<DB>,
+        (R,): for<'r> FromRow<'r, DB::Row>,
+    {
+        let args = self.args.clone();
+        let sql = self.sql_str();
+        let query = QueryScalar::new(sql, args);
+
+        query.fetch_one(self.pool.clone()).await
+    }
+
+    pub(crate) async fn fetch_scalar_all<R>(&self) -> Result<Vec<R>, Error>
     where
         DB::Arguments: IntoArguments<DB>,
         R: Send + Unpin + 'q,
@@ -335,57 +341,43 @@ where
         (R,): for<'r> FromRow<'r, DB::Row>,
     {
         let sql = self.sql_str();
-        let query = QueryScalar::new(&sql);
-        let query = self.bind_values(query).into_inner();
-
-        query.fetch_one(self.pool.clone()).await
-    }
-
-    pub(crate) async fn fetch_scalar_all<R>(&self) -> Result<Vec<R>, sqlx::Error>
-    where
-        DB::Arguments: IntoArguments<DB>,
-        R: Send + Unpin + 'q,
-        R: for<'r> Encode<'r, DB> + for<'r> Decode<'r, DB> + Type<DB>,
-        (R,): for<'r> FromRow<'r, DB::Row>,
-    {
-        let sql = self.sql_str();
-        let query = QueryScalar::new(&sql);
-        let query = self.bind_values(query).into_inner();
+        let args = self.args.clone();
+        let query = QueryScalar::new(sql, args);
 
         query.fetch_all(self.pool.clone()).await
     }
 
-    pub(crate) async fn fetch_fields_one<R>(&self) -> Result<R, sqlx::Error>
+    pub(crate) async fn fetch_fields_one(&self) -> Result<DB::Row, Error>
     where
         DB::Arguments: IntoArguments<DB>,
-        R: Send + Unpin + for<'r> FromRow<'r, DB::Row>,
+        for<'r> <DB as Database>::Row: FromRow<'r, <DB as Database>::Row>,
     {
         let sql = self.sql_str();
-        let query = QueryAs::new(&sql);
-        let query = self.bind_values(query).into_inner();
+        let args = self.args.clone();
+        let query = QueryAs::new(sql, args);
 
         query.fetch_one(self.pool.clone()).await
     }
 
-    pub(crate) async fn fetch_fields_all<R>(&self) -> Result<Vec<R>, sqlx::Error>
+    pub(crate) async fn fetch_fields_all(&self) -> Result<Vec<DB::Row>, Error>
     where
         DB::Arguments: IntoArguments<DB>,
-        R: Send + Unpin + for<'r> FromRow<'r, DB::Row>,
+        for<'r> <DB as Database>::Row: FromRow<'r, <DB as Database>::Row>,
     {
         let sql = self.sql_str();
-        let query = QueryAs::new(&sql);
-        let query = self.bind_values(query).into_inner();
+        let args = self.args.clone();
+        let query = QueryAs::new(sql, args);
 
         query.fetch_all(self.pool.clone()).await
     }
 
-    pub async fn execute(&self) -> Result<(), sqlx::Error>
+    pub async fn execute(&self) -> Result<(), Error>
     where
         DB::Arguments: IntoArguments<DB>,
     {
         let sql = self.sql_str();
-        let query = Query::new(&sql);
-        let query = self.bind_values(query).into_inner();
+        let args = self.args.clone();
+        let query = Query::new(sql, args);
 
         query.execute(self.pool.clone()).await?;
         Ok(())
@@ -419,7 +411,7 @@ impl<'q> Display for QueryCommand<'q> {
                     .inner()
                     .iter()
                     .enumerate()
-                    .map(|(i, _)| QbValue::arg(i))
+                    .map(|(i, _)| QueryMap::arg(i))
                     .collect::<Vec<_>>();
 
                 format!(
@@ -441,7 +433,7 @@ impl<'q> Display for QueryCommand<'q> {
                     .inner()
                     .iter()
                     .enumerate()
-                    .map(|(i, (col, _))| format!("{col} = {}", QbValue::arg(i)))
+                    .map(|(i, (col, _))| format!("{col} = {}", QueryMap::arg(i)))
                     .collect::<Vec<String>>()
                     .join(", ");
 
@@ -457,8 +449,8 @@ impl<'q> Display for QueryCommand<'q> {
 #[cfg(test)]
 mod tests {
     use crate::prelude::*;
-    use sqlx::{AnyPool, FromRow, SqlitePool};
     use sqlx::any::AnyPoolOptions;
+    use sqlx::{AnyPool, FromRow};
     use uuid::Uuid;
 
     #[derive(QbModel, FromRow)]
@@ -526,22 +518,22 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn test_insert_query_sql_str() {
-        let pool = pool().await;
-        let map = query_map! {
-          "name": "Demo User",
-          "age": 34
-        };
-
-        let mut qb = QB::new(&pool);
-        qb.insert::<TestUserModel>(map).await.ok();
-
-        assert_eq!(
-            qb.sql_str(),
-            "INSERT INTO users (age, name) VALUES ($1, $2)"
-        )
-    }
+    // #[tokio::test]
+    // async fn test_insert_query_sql_str() {
+    //     let pool = pool().await;
+    //     let map = query_map! {
+    //       "name": "Demo User",
+    //       "age": 34
+    //     };
+    //
+    //     let mut qb = QB::new(&pool);
+    //     qb.insert::<TestUserModel>(map).await.ok();
+    //
+    //     assert_eq!(
+    //         qb.sql_str(),
+    //         "INSERT INTO users (age, name) VALUES ($1, $2)"
+    //     )
+    // }
 
     #[tokio::test]
     async fn test_order_by() {

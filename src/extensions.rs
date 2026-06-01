@@ -1,7 +1,7 @@
+use std::fmt::Display;
 use crate::modifiers::{FilterJoiner, FilterOperator, QueryFilter};
-use crate::value::QbValue;
 
-pub fn eq<'q>(key: &'q str, value: impl Into<QbValue<'q>>) -> QueryFilter<'q> {
+pub fn eq(key: &'_ str, value: impl Display) -> QueryFilter<'_> {
     QueryFilter::from((key, value)).with_op(FilterOperator::Eq)
 }
 

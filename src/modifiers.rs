@@ -1,5 +1,4 @@
 use crate::extensions::{and, or};
-use crate::value::QbValue;
 use std::fmt::{Display, Formatter};
 
 pub struct QueryModifiers<'q> {
@@ -100,15 +99,19 @@ impl<'q> Default for QueryModifiers<'q> {
 }
 
 pub struct QueryFilter<'q> {
-    key: String,
-    value: QbValue<'q>,
+    key: &'q str,
+    value: String,
     joiner: Option<FilterJoiner>,
     operator: FilterOperator,
 }
 
 impl<'q> QueryFilter<'q> {
-    pub fn value(&self) -> QbValue<'q> {
-        self.value.clone()
+    pub fn key(&self) -> &str {
+        &self.key
+    }
+    
+    pub fn value(&self) -> &str {
+        &self.value
     }
 
     pub fn with_op(mut self, value: FilterOperator) -> Self {
@@ -144,23 +147,20 @@ impl Display for FilterOperator {
 }
 
 impl<'q> QueryFilter<'q> {
-    fn new(key: impl Into<String>, value: QbValue<'q>) -> Self {
+    fn new(key: &'q str, value: impl Into<String>) -> Self {
         QueryFilter {
-            key: key.into(),
-            value,
+            key,
+            value: value.into(),
             joiner: None,
             operator: FilterOperator::Eq,
         }
     }
 }
 
-impl<'q, K, V> From<(K, V)> for QueryFilter<'q>
-where
-    K: Into<String>,
-    V: Into<QbValue<'q>>,
+impl<'q, T: Display> From<(&'q str, T)> for QueryFilter<'q>
 {
-    fn from(value: (K, V)) -> Self {
-        QueryFilter::new(value.0, value.1.into())
+    fn from((k, v): (&'q str, T)) -> Self {
+        QueryFilter::new(k, v.to_string())
     }
 }
 

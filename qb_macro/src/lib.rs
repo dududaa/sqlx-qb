@@ -39,9 +39,18 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
 
             type InsertReturns = ();
 
-            fn insert<'q>(qb: &'q QB<'q, Self>) -> impl Future<Output = Result<Self::InsertReturns, sqlx::Error>> {
+            fn insert<'q, DB, E>(
+                qb: &mut QB<'q, DB, E>
+            ) -> impl Future<Output = Result<Self::InsertReturns, sqlx::Error>>
+            where
+                DB: Database,
+                E: Executor<'q, Database = DB> + Clone,
+                DB::Arguments: IntoArguments<DB>,
+                String: sqlx::Encode<'q, DB>,
+                String: sqlx::Type<DB>,
+            {
                 async {
-                    let _ = qb.execute(qb.pool()).await?;
+                    let _ = qb.execute().await?;
                     Ok(())
                 }
             }
