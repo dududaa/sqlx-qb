@@ -79,7 +79,7 @@ where
         M: Model,
         A: ModelInsertArg<M>,
     {
-        args.insert::<DB, P>(&self.pool).await
+        args.insert::<DB, P>(self.pool.clone()).await
     }
 
     pub async fn select<M>(&mut self) -> Result<M, Error>
@@ -106,13 +106,13 @@ where
         self.fetch_all().await
     }
 
-    pub async fn select_fields<M>(
+    pub async fn select_fields<M, R>(
         &mut self,
         fields: impl Into<Vec<&'q str>>,
-    ) -> Result<DB::Row, Error>
+    ) -> Result<R, Error>
     where
         M: Model,
-        for<'r> <DB as Database>::Row: FromRow<'r, <DB as Database>::Row>,
+        R: Send + Unpin + for<'r> FromRow<'r, DB::Row>,
     {
         self.with_command(QueryCommand::Select(
             QuerySelectCommand::Fields(fields.into()),
@@ -122,13 +122,13 @@ where
         self.fetch_fields_one().await
     }
 
-    pub async fn select_fields_all<M>(
+    pub async fn select_fields_all<M, R>(
         &mut self,
         fields: impl Into<Vec<&'q str>>,
-    ) -> Result<Vec<DB::Row>, Error>
+    ) -> Result<Vec<R>, Error>
     where
         M: Model,
-        for<'r> <DB as Database>::Row: FromRow<'r, <DB as Database>::Row>,
+        R: Send + Unpin + for<'r> FromRow<'r, DB::Row>,
     {
         self.with_command(QueryCommand::Select(
             QuerySelectCommand::Fields(fields.into()),
@@ -343,10 +343,10 @@ where
         query.fetch_all(self.pool.clone()).await
     }
 
-    pub(crate) async fn fetch_fields_one(&self) -> Result<DB::Row, Error>
+    pub(crate) async fn fetch_fields_one<R>(&self) -> Result<R, Error>
     where
         DB::Arguments: IntoArguments<DB>,
-        for<'r> <DB as Database>::Row: FromRow<'r, <DB as Database>::Row>,
+        R: Send + Unpin + for<'r> FromRow<'r, DB::Row>,
     {
         let sql = self.sql_str();
         let args = self.args.clone();
@@ -355,10 +355,10 @@ where
         query.fetch_one(self.pool.clone()).await
     }
 
-    pub(crate) async fn fetch_fields_all(&self) -> Result<Vec<DB::Row>, Error>
+    pub(crate) async fn fetch_fields_all<R>(&self) -> Result<Vec<R>, Error>
     where
         DB::Arguments: IntoArguments<DB>,
-        for<'r> <DB as Database>::Row: FromRow<'r, <DB as Database>::Row>,
+        R: Send + Unpin + for<'r> FromRow<'r, DB::Row>,
     {
         let sql = self.sql_str();
         let args = self.args.clone();

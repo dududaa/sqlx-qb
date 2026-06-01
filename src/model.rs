@@ -23,6 +23,6 @@ pub trait ModelInsertArg<M: Model> {
 
     fn insert<DB, P>(
         self,
-        pool: &P,
+        pool: P,
     ) -> impl Future<Output = Result<Self::Returns, sqlx::Error>> + Send;
 }
