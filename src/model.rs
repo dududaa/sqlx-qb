@@ -18,14 +18,16 @@ pub trait Model: Sized + Send + Unpin {
         String: sqlx::Type<DB>;
 }
 
-pub trait ModelInsertArg<M: Model> {
+pub trait ModelInsertArg<'q, M, DB, E>
+where
+    DB: Database,
+    E: Executor<'q, Database = DB>,
+    M: Model
+{
     type Returns;
 
-    fn insert<'q, DB, E>(
+    fn insert(
         self,
         pool: E,
-    ) -> impl Future<Output = Result<Self::Returns, sqlx::Error>> + Send
-    where
-        DB: Database,
-        E: Executor<'q, Database = DB>;
+    ) -> impl Future<Output = Result<Self::Returns, sqlx::Error>> + Send;
 }

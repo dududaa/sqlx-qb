@@ -19,7 +19,6 @@ pub mod prelude {
     pub use std::future::Future;
 }
 
-
 use crate::model::{Model, ModelInsertArg};
 use crate::query::{Query, QueryAs, QueryScalar};
 use map::QueryMap;
@@ -36,21 +35,21 @@ where
     inner: SqlxQb<'q, DB, P>,
 }
 
-impl<'q, DB, P> QB<'q, DB, P>
+impl<'q, DB, E> QB<'q, DB, E>
 where
     DB: Database,
-    P: Executor<'q, Database = DB> + Clone,
+    E: Executor<'q, Database = DB> + Clone,
     String: sqlx::Encode<'q, DB>,
     String: sqlx::Type<DB>,
     DB::Arguments: IntoArguments<DB>,
 {
-    pub fn new(pool: P) -> Self {
+    pub fn new(pool: E) -> Self {
         Self {
             inner: SqlxQb::new(pool),
         }
     }
 
-    pub fn pool(&'q self) -> &'q P {
+    pub fn pool(&'q self) -> &'q E {
         &self.pool
     }
 
@@ -77,9 +76,9 @@ where
     pub async fn insert_args<M, A>(&self, args: A) -> Result<A::Returns, Error>
     where
         M: Model,
-        A: ModelInsertArg<M>,
+        A: ModelInsertArg<'q, M, DB, E>,
     {
-        args.insert::<DB, P>(self.pool.clone()).await
+        args.insert(self.pool.clone()).await
     }
 
     pub async fn select<M>(&mut self) -> Result<M, Error>
@@ -96,8 +95,7 @@ where
 
     pub async fn select_all<M: Model + for<'r> sqlx::FromRow<'r, DB::Row>>(
         &mut self,
-    ) -> Result<Vec<M>, Error>
-    {
+    ) -> Result<Vec<M>, Error> {
         self.with_command(QueryCommand::Select(
             QuerySelectCommand::WildCard,
             M::TABLE_NAME,
@@ -106,10 +104,7 @@ where
         self.fetch_all().await
     }
 
-    pub async fn select_fields<M, R>(
-        &mut self,
-        fields: impl Into<Vec<&'q str>>,
-    ) -> Result<R, Error>
+    pub async fn select_fields<M, R>(&mut self, fields: impl Into<Vec<&'q str>>) -> Result<R, Error>
     where
         M: Model,
         R: Send + Unpin + for<'r> FromRow<'r, DB::Row>,
@@ -168,14 +163,12 @@ where
         self.fetch_scalar_all().await
     }
 
-    pub async fn update<M: Model>(&mut self, set: QueryMap<'q>) -> Result<(), Error>
-    {
+    pub async fn update<M: Model>(&mut self, set: QueryMap<'q>) -> Result<(), Error> {
         self.with_command(QueryCommand::Update(M::TABLE_NAME, set));
         self.execute().await
     }
 
-    pub async fn delete<M: Model>(mut self) -> Result<(), Error>
-    {
+    pub async fn delete<M: Model>(mut self) -> Result<(), Error> {
         self.with_command(QueryCommand::Delete(M::TABLE_NAME));
         self.execute().await
     }
@@ -444,10 +437,10 @@ impl<'q> Display for QueryCommand<'q> {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
     use crate::prelude::*;
-    use sqlx::{FromRow, SqlitePool};
     use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
+    use sqlx::{FromRow, SqlitePool};
+    use std::str::FromStr;
     use uuid::Uuid;
 
     #[derive(QbModel, FromRow)]
@@ -464,7 +457,6 @@ mod tests {
             .connect_with(connection_options)
             .await
             .unwrap()
-
     }
 
     #[tokio::test]
