@@ -2,7 +2,7 @@ use crate::query::QueryWrapper;
 
 #[cfg(feature = "chrono")]
 use chrono::{DateTime, Utc};
-
+use sqlx::Database;
 #[cfg(feature = "uuid")]
 use uuid::Uuid;
 
@@ -20,7 +20,7 @@ pub enum QbValue<'q> {
 
 //
 impl<'q> QbValue<'q> {
-    pub(super) fn bind<Q: QueryWrapper<'q>>(self, query: Q) -> Q {
+    pub(super) fn bind<DB: Database, Q: QueryWrapper<'q, DB>>(self, query: Q) -> Q {
         match self {
             QbValue::SmallInt(i) => query.bind(i),
             QbValue::Int(i) => query.bind(i),

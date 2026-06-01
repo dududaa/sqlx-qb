@@ -1,18 +1,17 @@
-use crate::QbEngine;
 use sqlx::query::{Query as SqlxQuery, QueryAs as SqlxQueryAs, QueryScalar as SqlxQueryScalar};
-use sqlx::{Database, Decode, Encode, FromRow, Type};
+use sqlx::{AssertSqlSafe, Database, Decode, Encode, FromRow, Type};
 
-pub struct Query<'q, DB: Database>(SqlxQuery<'q, DB, DB::Arguments<'q>>);
+pub struct Query<'q, DB: Database>(SqlxQuery<'q, DB, DB::Arguments>);
 
-impl<'q> Query<'q, QbEngine> {
-    pub fn new(sql: &'q str) -> Self {
-        Self(sqlx::query(sql))
+impl<'q, DB: Database> Query<'q, DB> {
+    pub fn new(sql: &str) -> Self {
+        Self(sqlx::query(AssertSqlSafe(sql)))
     }
 }
 
-impl<'q> QueryWrapper<'q> for Query<'q, QbEngine> {
-    type Inner = SqlxQuery<'q, QbEngine, <QbEngine as Database>::Arguments<'q>>;
-    fn bind<T: 'q + Encode<'q, QbEngine> + Type<QbEngine>>(self, value: T) -> Self {
+impl<'q, DB: Database> QueryWrapper<'q, DB> for Query<'q, DB> {
+    type Inner = SqlxQuery<'q, DB, DB::Arguments>;
+    fn bind<T: 'q + Encode<'q, DB> + Type<DB>>(self, value: T) -> Self {
         Self(self.0.bind(value))
     }
 
@@ -21,24 +20,24 @@ impl<'q> QueryWrapper<'q> for Query<'q, QbEngine> {
     }
 }
 
-pub struct QueryAs<'q, DB: Database, M>(SqlxQueryAs<'q, DB, M, DB::Arguments<'q>>);
+pub struct QueryAs<'q, DB: Database, M>(SqlxQueryAs<'q, DB, M, DB::Arguments>);
 
-impl<'q, M> QueryAs<'q, QbEngine, M>
+impl<'q, M, DB: Database> QueryAs<'q, DB, M>
 where
-    M: Sized + Send + Unpin + for<'r> FromRow<'r, <QbEngine as Database>::Row>,
+    M: Sized + Send + Unpin + for<'r> FromRow<'r, DB::Row>,
 {
-    pub fn new(sql: &'q str) -> Self {
-        Self(sqlx::query_as(sql))
+    pub fn new(sql: &str) -> Self {
+        Self(sqlx::query_as(AssertSqlSafe(sql)))
     }
 }
 
-impl<'q, M> QueryWrapper<'q> for QueryAs<'q, QbEngine, M>
+impl<'q, M, DB: Database> QueryWrapper<'q, DB> for QueryAs<'q, DB, M>
 where
-    M: Sized + Send + Unpin + for<'r> FromRow<'r, <QbEngine as Database>::Row>,
+    M: Sized + Send + Unpin + for<'r> FromRow<'r, DB::Row>,
 {
-    type Inner = SqlxQueryAs<'q, QbEngine, M, <QbEngine as Database>::Arguments<'q>>;
+    type Inner = SqlxQueryAs<'q, DB, M, DB::Arguments>;
 
-    fn bind<T: 'q + Encode<'q, QbEngine> + Type<QbEngine>>(self, value: T) -> Self {
+    fn bind<T: 'q + Encode<'q, DB> + Type<DB>>(self, value: T) -> Self {
         Self(self.0.bind(value))
     }
 
@@ -47,23 +46,21 @@ where
     }
 }
 
-#[allow(dead_code)]
-pub struct QueryScalar<'q, DB: Database, R>(SqlxQueryScalar<'q, DB, R, DB::Arguments<'q>>);
+pub struct QueryScalar<'q, DB: Database, R>(SqlxQueryScalar<'q, DB, R, DB::Arguments>);
 
-#[allow(dead_code)]
-impl<'q, R> QueryScalar<'q, QbEngine, R>
+impl<'q, R, DB: Database> QueryScalar<'q, DB, R>
 where
-    R: 'q + Encode<'q, QbEngine> + Decode<'q, QbEngine> + Type<QbEngine>,
-    (R,): for<'r> FromRow<'r, <QbEngine as Database>::Row>,
+    R: 'q + Encode<'q, DB> + Decode<'q, DB> + Type<DB>,
+    (R,): for<'r> FromRow<'r, DB::Row>,
 {
-    pub fn new(sql: &'q str) -> Self {
-        Self(sqlx::query_scalar(sql))
+    pub fn new(sql: &str) -> Self {
+        Self(sqlx::query_scalar(AssertSqlSafe(sql)))
     }
 }
 
-impl<'q, R> QueryWrapper<'q> for QueryScalar<'q, QbEngine, R> {
-    type Inner = SqlxQueryScalar<'q, QbEngine, R, <QbEngine as Database>::Arguments<'q>>;
-    fn bind<T: 'q + Encode<'q, QbEngine> + Type<QbEngine>>(self, value: T) -> Self {
+impl<'q, R, DB: Database> QueryWrapper<'q, DB> for QueryScalar<'q, DB, R> {
+    type Inner = SqlxQueryScalar<'q, DB, R, DB::Arguments>;
+    fn bind<T: 'q + Encode<'q, DB> + Type<DB>>(self, value: T) -> Self {
         Self(self.0.bind(value))
     }
 
@@ -72,9 +69,9 @@ impl<'q, R> QueryWrapper<'q> for QueryScalar<'q, QbEngine, R> {
     }
 }
 
-pub trait QueryWrapper<'q> {
+pub trait QueryWrapper<'q, DB: Database> {
     type Inner;
-    fn bind<T: 'q + Encode<'q, QbEngine> + Type<QbEngine>>(self, value: T) -> Self;
+    fn bind<T: 'q + Encode<'q, DB> + Type<DB>>(self, value: T) -> Self;
 
     fn into_inner(self) -> Self::Inner;
 }
