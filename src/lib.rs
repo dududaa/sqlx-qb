@@ -71,10 +71,10 @@ where
         M::get(self, value.into()).await
     }
 
-    pub async fn insert<M: Model, R>(
+    pub async fn insert<M: Model>(
         &'q mut self,
         map: QueryMap<'q>,
-    ) -> Result<M::InsertReturns, sqlx::Error> {
+    ) -> Result<M::InsertReturns, Error> {
         self.with_command(QueryCommand::Insert(M::TABLE_NAME, map));
         let modifiers = self.modifiers;
         self.reset_modifiers();
@@ -457,10 +457,8 @@ impl<'q> Display for QueryCommand<'q> {
 #[cfg(test)]
 mod tests {
     use crate::prelude::*;
-    use sqlx::any::AnyPoolOptions;
-    use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
     use sqlx::{AnyPool, FromRow, SqlitePool};
-    use std::str::FromStr;
+    use sqlx::any::AnyPoolOptions;
     use uuid::Uuid;
 
     #[derive(QbModel, FromRow)]
@@ -495,8 +493,8 @@ mod tests {
             .or(eq("pid", "some-pid"))
             .with_limit(1);
 
-        let mut qb = QB::<TestUserModel>::new(&pool).with_modifiers(&modifiers);
-        qb.select().await.ok();
+        let mut qb = QB::new(&pool).with_modifiers(&modifiers);
+        qb.select::<TestUserModel>().await.ok();
 
         assert_eq!(
             qb.sql_str(),
@@ -518,9 +516,9 @@ mod tests {
           "age": 34
         };
 
-        let mut qb = QB::<TestUserModel>::new(&pool);
+        let mut qb = QB::new(&pool);
         qb.set_modifiers(&modifiers);
-        qb.update(set).await.ok();
+        qb.update::<TestUserModel>(set).await.ok();
 
         assert_eq!(
             qb.sql_str(),
@@ -536,8 +534,8 @@ mod tests {
           "age": 34
         };
 
-        let mut qb = QB::<TestUserModel>::new(&pool);
-        qb.insert(map).await.ok();
+        let mut qb = QB::new(&pool);
+        qb.insert::<TestUserModel>(map).await.ok();
 
         assert_eq!(
             qb.sql_str(),
@@ -551,8 +549,8 @@ mod tests {
         let modifiers =
             QueryModifiers::new().with_sort(query_sort!(QuerySortDir::DESC, "created_at"));
 
-        let mut qb = QB::<TestUserModel>::new(&pool).with_modifiers(&modifiers);
-        qb.select().await.ok();
+        let mut qb = QB::new(&pool).with_modifiers(&modifiers);
+        qb.select::<TestUserModel>().await.ok();
 
         assert_eq!(qb.sql_str(), "SELECT * FROM users ORDER BY created_at DESC");
     }
