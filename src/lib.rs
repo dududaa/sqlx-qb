@@ -3,8 +3,6 @@ mod map;
 mod model;
 mod modifiers;
 mod query;
-// mod types;
-// mod value;
 
 pub mod prelude {
     pub use crate::extensions::*;
@@ -23,6 +21,7 @@ use crate::model::{Model, ModelInsertArg};
 use crate::query::{Query, QueryAs, QueryScalar};
 use map::QueryMap;
 use modifiers::QueryModifiers;
+use serde::Serialize;
 use sqlx::{Database, Decode, Encode, Error, Executor, FromRow, IntoArguments, Type};
 use std::fmt::{Display, Formatter};
 use std::ops::{Deref, DerefMut};
@@ -57,10 +56,21 @@ where
         self.inner.sql_str()
     }
 
-    pub async fn insert<M: Model>(
+    #[cfg(not(feature = "serde"))]
+    pub async fn insert<M: Model>(&'q mut self, map: QueryMap) -> Result<M::InsertReturns, Error> {
+        self.insert_map::<M>(map).await
+    }
+
+    #[cfg(feature = "serde")]
+    pub async fn insert<M: Model, T: Serialize>(
         &'q mut self,
-        map: QueryMap<'q>,
+        value: &'q T,
     ) -> Result<M::InsertReturns, Error> {
+        let map = QueryMap::from_value(value)?;
+        self.insert_map::<M>(map).await
+    }
+
+    async fn insert_map<M: Model>(&'q mut self, map: QueryMap) -> Result<M::InsertReturns, Error> {
         self.with_command(QueryCommand::Insert(M::TABLE_NAME, map));
         let modifiers = self.modifiers;
         self.reset_modifiers();
@@ -163,7 +173,17 @@ where
         self.fetch_scalar_all().await
     }
 
-    pub async fn update<M: Model>(&mut self, set: QueryMap<'q>) -> Result<(), Error> {
+    pub async fn update<M: Model, T: Serialize>(&mut self, value: &'q T) -> Result<(), Error> {
+        let map = QueryMap::from_value(value)?;
+        self.update_map::<M>(map).await
+    }
+
+    #[cfg(not(feature = "serde"))]
+    pub async fn update<M: Model>(&mut self, value: QueryMap) -> Result<(), Error> {
+        self.update_map(value).await
+    }
+
+    pub async fn update_map<M: Model>(&mut self, set: QueryMap) -> Result<(), Error> {
         self.with_command(QueryCommand::Update(M::TABLE_NAME, set));
         self.execute().await
     }
@@ -379,9 +399,9 @@ enum QuerySelectCommand<'q> {
 }
 
 enum QueryCommand<'q> {
-    Insert(&'q str, QueryMap<'q>),
+    Insert(&'q str, QueryMap),
     Select(QuerySelectCommand<'q>, &'q str),
-    Update(&'q str, QueryMap<'q>),
+    Update(&'q str, QueryMap),
     Delete(&'q str),
     Null,
 }
@@ -438,6 +458,7 @@ impl<'q> Display for QueryCommand<'q> {
 #[cfg(test)]
 mod tests {
     use crate::prelude::*;
+    use serde_json::json;
     use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
     use sqlx::{FromRow, SqlitePool};
     use std::str::FromStr;
@@ -486,14 +507,21 @@ mod tests {
             .and(eq("business_id", 32))
             .or(eq("pid", Uuid::new_v4()));
 
-        let set = query_map! {
+        #[cfg(not(feature = "serde"))]
+        let map = query_map! {
           "name": "Demo User",
           "age": 34
         };
 
+        #[cfg(feature = "serde")]
+        let map = &json! ({
+          "name": "Demo User",
+          "age": 34
+        });
+
         let mut qb = QB::new(&pool);
         qb.set_modifiers(&modifiers);
-        qb.update::<TestUserModel>(set).await.ok();
+        qb.update::<TestUserModel, _>(map).await.ok();
 
         assert_eq!(
             qb.sql_str(),
@@ -504,13 +532,21 @@ mod tests {
     // #[tokio::test]
     // async fn test_insert_query_sql_str() {
     //     let pool = pool().await;
+    //
+    //     #[cfg(not(feature = "serde"))]
     //     let map = query_map! {
     //       "name": "Demo User",
     //       "age": 34
     //     };
     //
+    //     #[cfg(feature = "serde")]
+    //     let map = &json! ({
+    //       "name": "Demo User",
+    //       "age": 34
+    //     });
+    //
     //     let mut qb = QB::new(&pool);
-    //     qb.insert::<TestUserModel>(map).await.ok();
+    //     qb.insert::<TestUserModel, _>(map).await.ok();
     //
     //     assert_eq!(
     //         qb.sql_str(),

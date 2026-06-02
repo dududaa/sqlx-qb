@@ -13,15 +13,15 @@ categories = ["database"]
 path = "src/lib.rs"
 
 [features]
-#default = ["postgres", "uuid", "chrono"]
 mysql = ["sqlx/mysql"]
-uuid = ["sqlx/uuid"]
-chrono = ["sqlx/chrono"]
+serde = ["dep:serde", "dep:serde_json"]
 
 [dependencies]
 sqlx = { version = "0.9.0", default-features = false }
 uuid = { version = "1.23.1", features = ["v4"] }
 qb_macro = { path = "qb_macro" }
+serde = { version = "1.0.228", optional = true, features = ["derive"] }
+serde_json = { version = "1.0.150", optional = true }
 
 [dev-dependencies]
 sqlx = { version = "0.9.0", features = ["sqlite", "runtime-tokio", "sqlite-bundled"] }
