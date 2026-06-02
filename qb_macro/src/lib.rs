@@ -1,43 +1,30 @@
-use proc_macro::TokenStream;
-use quote::quote;
-use syn::{Expr, Lit, parse_macro_input};
+mod utils;
 
-#[proc_macro_derive(QbModel, attributes(model))]
+use proc_macro::TokenStream;
+use darling::FromDeriveInput;
+use quote::quote;
+use syn::{Expr, Lit, parse_macro_input, Type};
+use crate::utils::ModelArgs;
+
+#[proc_macro_derive(Model, attributes(model))]
 pub fn model_derive(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as syn::DeriveInput);
+    let args = match ModelArgs::from_derive_input(&input) {
+        Ok(v) => v,
+        Err(e) => return TokenStream::from(e.write_errors()),
+    };
+    
     let ident = &input.ident;
-
-    let mut table_name = to_snake_case(&ident.to_string());
-    let mut primary_column = String::from("id");
-
-    for attr in &input.attrs {
-        if attr.path().is_ident("model") {
-            let _ = attr.parse_nested_meta(|meta| {
-                if meta.path.is_ident("table_name") || meta.path.is_ident("primary_column") {
-                    let value = meta.value()?;
-                    if let Expr::Lit(expr_lit) = value.parse::<Expr>()?
-                        && let Lit::Str(lit_str) = expr_lit.lit
-                    {
-                        let value = lit_str.value();
-                        if value == "primary_column" {
-                            primary_column = value;
-                        } else {
-                            table_name = value;
-                        }
-                    }
-                }
-
-                Ok(())
-            });
-        }
-    }
-
+    let table_name = to_snake_case(&args.table_name);
+    let primary_column = args.primary_column;
+    let insert_returns = args.insert_returns;
+    
     let expanded = quote! {
         impl Model for #ident {
             const TABLE_NAME: &'static str = #table_name;
             const PRIMARY_COLUMN: &'static str = #primary_column;
 
-            type InsertReturns = ();
+            type InsertReturns = #insert_returns;
 
             fn insert<'q, DB, E>(
                 qb: &mut QB<'q, DB, E>
