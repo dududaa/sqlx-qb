@@ -1,9 +1,12 @@
-use serde::Serialize;
-use serde_json::Value;
-use sqlx::Error;
 use std::collections::BTreeMap;
 use std::fmt::Display;
 
+#[cfg(feature = "serde")]
+use {serde::Serialize, serde_json::Value, sqlx::Error};
+
+#[cfg(not(feature = "serde"))]
+#[derive(Clone)]
+pub struct QueryMap(BTreeMap<String, String>);
 
 #[derive(Clone)]
 #[cfg(feature = "serde")]
@@ -19,6 +22,7 @@ impl QueryMap {
         self.0.insert(key.to_string(), value.to_string());
     }
 
+    #[cfg(feature = "serde")]
     pub fn from_value<T: Serialize>(value: &T) -> Result<Self, Error> {
         let json_value = serde_json::to_value(value).map_err(|_| Error::BeginFailed)?;
         match json_value {

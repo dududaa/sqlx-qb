@@ -21,10 +21,12 @@ use crate::model::{Model, ModelInsertArg};
 use crate::query::{Query, QueryAs, QueryScalar};
 use map::QueryMap;
 use modifiers::QueryModifiers;
-use serde::Serialize;
 use sqlx::{Database, Decode, Encode, Error, Executor, FromRow, IntoArguments, Type};
 use std::fmt::{Display, Formatter};
 use std::ops::{Deref, DerefMut};
+
+#[cfg(feature = "serde")]
+use serde::Serialize;
 
 pub struct QB<'q, DB, P>
 where
@@ -58,7 +60,16 @@ where
 
     #[cfg(not(feature = "serde"))]
     pub async fn insert<M: Model>(&'q mut self, map: QueryMap) -> Result<M::InsertReturns, Error> {
-        self.insert_map::<M>(map).await
+        self.insert_map::<M>(map, None).await
+    }
+
+    #[cfg(not(feature = "serde"))]
+    pub async fn insert_returns<M: Model>(
+        &'q mut self,
+        map: QueryMap,
+        column: &'q str,
+    ) -> Result<M::InsertReturns, Error> {
+        self.insert_map::<M>(map, Some(column)).await
     }
 
     #[cfg(feature = "serde")]
@@ -67,11 +78,31 @@ where
         value: &'q T,
     ) -> Result<M::InsertReturns, Error> {
         let map = QueryMap::from_value(value)?;
-        self.insert_map::<M>(map).await
+        self.insert_map::<M>(map, None).await
     }
 
-    async fn insert_map<M: Model>(&'q mut self, map: QueryMap) -> Result<M::InsertReturns, Error> {
-        self.with_command(QueryCommand::Insert(M::TABLE_NAME, map));
+    #[cfg(feature = "serde")]
+    /// Insert data and returns the specified `column`. Call this ONLY if your database supports RETURNING statement.
+    pub async fn insert_returns<M: Model, T: Serialize>(
+        &'q mut self,
+        value: &'q T,
+        column: &'q str,
+    ) -> Result<M::InsertReturns, Error> {
+        let map = QueryMap::from_value(value)?;
+        self.insert_map::<M>(map, Some(column)).await
+    }
+
+    async fn insert_map<M: Model>(
+        &'q mut self,
+        map: QueryMap,
+        returning: Option<&'q str>,
+    ) -> Result<M::InsertReturns, Error> {
+        self.with_command(QueryCommand::Insert {
+            table_name: M::TABLE_NAME,
+            map,
+            returning,
+        });
+
         let modifiers = self.modifiers;
         self.reset_modifiers();
 
@@ -173,6 +204,7 @@ where
         self.fetch_scalar_all().await
     }
 
+    #[cfg(feature = "serde")]
     pub async fn update<M: Model, T: Serialize>(&mut self, value: &'q T) -> Result<(), Error> {
         let map = QueryMap::from_value(value)?;
         self.update_map::<M>(map).await
@@ -180,7 +212,7 @@ where
 
     #[cfg(not(feature = "serde"))]
     pub async fn update<M: Model>(&mut self, value: QueryMap) -> Result<(), Error> {
-        self.update_map(value).await
+        self.update_map::<M>(value).await
     }
 
     pub async fn update_map<M: Model>(&mut self, set: QueryMap) -> Result<(), Error> {
@@ -285,7 +317,7 @@ where
             }
         }
 
-        if let QueryCommand::Insert(_, map) = &self.cmd {
+        if let QueryCommand::Insert { map, .. } = &self.cmd {
             for v in map.inner().values() {
                 self.args.push(v.clone());
             }
@@ -399,7 +431,12 @@ enum QuerySelectCommand<'q> {
 }
 
 enum QueryCommand<'q> {
-    Insert(&'q str, QueryMap),
+    Insert {
+        table_name: &'q str,
+        map: QueryMap,
+        /// The column the table should return after creating.
+        returning: Option<&'q str>,
+    },
     Select(QuerySelectCommand<'q>, &'q str),
     Update(&'q str, QueryMap),
     Delete(&'q str),
@@ -409,7 +446,11 @@ enum QueryCommand<'q> {
 impl<'q> Display for QueryCommand<'q> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let cmd = match self {
-            QueryCommand::Insert(table_name, map) => {
+            QueryCommand::Insert {
+                table_name,
+                map,
+                returning: returns,
+            } => {
                 let columns = map
                     .inner()
                     .keys()
@@ -423,11 +464,16 @@ impl<'q> Display for QueryCommand<'q> {
                     .map(|(i, _)| QueryMap::arg(i))
                     .collect::<Vec<_>>();
 
+                let returning = returns
+                    .map(|col| format!("RETURNING {}", col))
+                    .unwrap_or_default();
+
                 format!(
-                    "INSERT INTO {} ({}) VALUES ({})",
+                    "INSERT INTO {} ({}) VALUES ({}) {}",
                     table_name,
                     columns.join(", "),
-                    values.join(", ")
+                    values.join(", "),
+                    returning
                 )
             }
             QueryCommand::Select(select, table_name) => match select {
@@ -458,11 +504,13 @@ impl<'q> Display for QueryCommand<'q> {
 #[cfg(test)]
 mod tests {
     use crate::prelude::*;
-    use serde_json::json;
     use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
     use sqlx::{FromRow, SqlitePool};
     use std::str::FromStr;
     use uuid::Uuid;
+
+    #[cfg(feature = "serde")]
+    use serde_json::json;
 
     #[derive(Model, FromRow)]
     #[model(table_name = "users")]
@@ -521,7 +569,12 @@ mod tests {
 
         let mut qb = QB::new(&pool);
         qb.set_modifiers(&modifiers);
+
+        #[cfg(feature = "serde")]
         qb.update::<TestUserModel, _>(map).await.ok();
+
+        #[cfg(not(feature = "serde"))]
+        qb.update::<TestUserModel>(map).await.ok();
 
         assert_eq!(
             qb.sql_str(),

@@ -1,10 +1,10 @@
 mod utils;
 
-use proc_macro::TokenStream;
-use darling::FromDeriveInput;
-use quote::quote;
-use syn::{Expr, Lit, parse_macro_input, Type};
 use crate::utils::ModelArgs;
+use darling::FromDeriveInput;
+use proc_macro::TokenStream;
+use quote::quote;
+use syn::parse_macro_input;
 
 #[proc_macro_derive(Model, attributes(model))]
 pub fn model_derive(input: TokenStream) -> TokenStream {
