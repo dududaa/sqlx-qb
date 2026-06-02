@@ -12,7 +12,7 @@ pub mod prelude {
     pub use crate::query_map;
     pub use crate::query_sort;
     pub use crate::QB;
-    pub use qb_macro::QbModel;
+    pub use qb_macro::Model;
     pub use sqlx::{Database, Executor, FromRow, IntoArguments};
     pub use std::future::Future;
 }
@@ -464,7 +464,7 @@ mod tests {
     use std::str::FromStr;
     use uuid::Uuid;
 
-    #[derive(QbModel, FromRow)]
+    #[derive(Model, FromRow)]
     #[model(table_name = "users")]
     struct TestUserModel {}
 
