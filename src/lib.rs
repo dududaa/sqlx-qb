@@ -59,8 +59,8 @@ where
     }
 
     #[cfg(not(feature = "serde"))]
-    pub async fn insert<M: Model>(&'q mut self, map: QueryMap) -> Result<M::InsertReturns, Error> {
-        self.insert_map::<M>(map, None).await
+    pub async fn insert<M: Model>(&'q mut self, map: QueryMap) -> Result<(), Error> {
+        self.execute_insert::<M, _, _>(map, None, M::insert).await
     }
 
     #[cfg(not(feature = "serde"))]
@@ -68,17 +68,20 @@ where
         &'q mut self,
         map: QueryMap,
         column: &'q str,
-    ) -> Result<M::InsertReturns, Error> {
-        self.insert_map::<M>(map, Some(column)).await
+    ) -> Result<M::InsertReturns, Error>
+    where
+        M::InsertReturns:
+            for<'r> Encode<'r, DB> + for<'r> Decode<'r, DB> + Type<DB> + Send + Unpin + 'q,
+        (M::InsertReturns,): for<'r> FromRow<'r, DB::Row>,
+    {
+        self.execute_insert::<M, _, _>(map, Some(column), M::insert_returns)
+            .await
     }
 
     #[cfg(feature = "serde")]
-    pub async fn insert<M: Model, T: Serialize>(
-        &'q mut self,
-        value: &'q T,
-    ) -> Result<M::InsertReturns, Error> {
+    pub async fn insert<M: Model, T: Serialize>(&'q mut self, value: &'q T) -> Result<(), Error> {
         let map = QueryMap::from_value(value)?;
-        self.insert_map::<M>(map, None).await
+        self.execute_insert::<M, _, _>(map, None, M::insert).await
     }
 
     #[cfg(feature = "serde")]
@@ -87,16 +90,27 @@ where
         &'q mut self,
         value: &'q T,
         column: &'q str,
-    ) -> Result<M::InsertReturns, Error> {
+    ) -> Result<M::InsertReturns, Error>
+    where
+        M::InsertReturns:
+            for<'r> Encode<'r, DB> + for<'r> Decode<'r, DB> + Type<DB> + Send + Unpin + 'q,
+        (M::InsertReturns,): for<'r> FromRow<'r, DB::Row>,
+    {
         let map = QueryMap::from_value(value)?;
-        self.insert_map::<M>(map, Some(column)).await
+        self.execute_insert::<M, _, _>(map, Some(column), M::insert_returns)
+            .await
     }
 
-    async fn insert_map<M: Model>(
-        &'q mut self,
+    async fn execute_insert<M, R, F>(
+        &mut self,
         map: QueryMap,
         returning: Option<&'q str>,
-    ) -> Result<M::InsertReturns, Error> {
+        call: F,
+    ) -> R
+    where
+        F: AsyncFn(&mut Self) -> R,
+        M: Model,
+    {
         self.with_command(QueryCommand::Insert {
             table_name: M::TABLE_NAME,
             map,
@@ -106,14 +120,16 @@ where
         let modifiers = self.modifiers;
         self.reset_modifiers();
 
-        let result = M::insert(self).await;
+        let res = call(self).await;
+
         if let Some(modifiers) = modifiers {
             self.set_modifiers(modifiers);
         }
 
-        result
+        res
     }
 
+    #[deprecated]
     pub async fn insert_args<M, A>(&self, args: A) -> Result<A::Returns, Error>
     where
         M: Model,
