@@ -4,7 +4,10 @@ use sqlx::Error;
 use std::collections::BTreeMap;
 use std::fmt::Display;
 
+
 #[derive(Clone)]
+#[cfg(feature = "serde")]
+#[derive(Serialize)]
 pub struct QueryMap(BTreeMap<String, String>);
 
 impl QueryMap {
