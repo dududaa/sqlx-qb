@@ -17,7 +17,7 @@ pub mod prelude {
     pub use std::future::Future;
 }
 
-use crate::model::Model;
+use crate::model::{Model, ModelInsert, QueryMapInput};
 use crate::query::{Query, QueryAs, QueryScalar};
 use map::QueryMap;
 use modifiers::QueryModifiers;
@@ -25,7 +25,6 @@ use sqlx::{Database, Decode, Encode, Error, Executor, FromRow, IntoArguments, Ty
 use std::fmt::{Display, Formatter};
 use std::ops::{Deref, DerefMut};
 
-use crate::prelude::ModelInsert;
 #[cfg(feature = "serde")]
 use serde::Serialize;
 
@@ -70,25 +69,29 @@ where
         self.table_name = Some(table_name);
     }
 
-    pub fn table_name(&self) -> Option<&'q str> {
-        self.table_name.clone()
+    pub fn table_name(&self) -> Result<&'q str, Error> {
+        self.table_name.ok_or(Error::InvalidArgument(
+            "Missing table name. Call qb.set_table_name(value).".to_string(),
+        ))
     }
 
     #[cfg(not(feature = "serde"))]
-    pub async fn insert<I: ModelInsert<'q>>(&'q mut self, map: &'q I) -> Result<(), Error> {
+    pub async fn insert<Returns, I: ModelInsert<'q, Returns>>(
+        &'q mut self,
+        map: &'q I,
+    ) -> Result<(), Error> {
         map.insert(self).await
     }
 
     #[cfg(not(feature = "serde"))]
-    pub async fn insert_returns<I: ModelInsert<'q>>(
+    pub async fn insert_returns<Returns, I: ModelInsert<'q, Returns>>(
         &'q mut self,
         map: &'q I,
         column: &'q str,
-    ) -> Result<I::InsertReturns, Error>
+    ) -> Result<Returns, Error>
     where
-        I::InsertReturns:
-            for<'r> Encode<'r, DB> + for<'r> Decode<'r, DB> + Type<DB> + Send + Unpin + 'q,
-        (I::InsertReturns,): for<'r> FromRow<'r, DB::Row>,
+        Returns: for<'r> Encode<'r, DB> + for<'r> Decode<'r, DB> + Type<DB> + Send + Unpin + 'q,
+        (Returns,): for<'r> FromRow<'r, DB::Row>,
     {
         map.insert_returns(self, column).await
     }
@@ -115,9 +118,9 @@ where
         M::insert_returns(self, map, column).await
     }
 
-    pub async fn select<M>(&mut self) -> Result<M, Error>
+    pub async fn select<M: Model<'q, DB, E>>(&mut self) -> Result<M, Error>
     where
-        M: Model<'q, DB, E> + for<'r> sqlx::FromRow<'r, DB::Row>,
+        M: for<'r> sqlx::FromRow<'r, DB::Row>,
     {
         self.with_command(QueryCommand::Select(
             QuerySelectCommand::WildCard,
@@ -127,9 +130,10 @@ where
         M::select(self).await
     }
 
-    pub async fn select_all<M: Model<'q, DB, E> + for<'r> sqlx::FromRow<'r, DB::Row>>(
-        &mut self,
-    ) -> Result<Vec<M>, Error> {
+    pub async fn select_all<M: Model<'q, DB, E>>(&mut self) -> Result<Vec<M>, Error>
+    where
+        M: for<'r> sqlx::FromRow<'r, DB::Row>,
+    {
         self.with_command(QueryCommand::Select(
             QuerySelectCommand::WildCard,
             M::TABLE_NAME,
@@ -138,63 +142,61 @@ where
         M::select_all(self).await
     }
 
-    pub async fn select_fields<M, R>(&mut self, fields: impl Into<Vec<&'q str>>) -> Result<R, Error>
+    pub async fn select_fields<R>(&mut self, fields: impl Into<Vec<&'q str>>) -> Result<R, Error>
     where
-        M: Model<'q, DB, E>,
         R: Send + Unpin + for<'r> FromRow<'r, DB::Row>,
     {
+        let table_name = self.table_name()?;
+
         self.with_command(QueryCommand::Select(
             QuerySelectCommand::Fields(fields.into()),
-            M::TABLE_NAME,
+            table_name,
         ));
 
-        M::select_fields::<M, R>(self).await
+        self.fetch_fields_one().await
     }
 
-    pub async fn select_fields_all<M, R>(
+    pub async fn select_fields_all<R>(
         &mut self,
         fields: impl Into<Vec<&'q str>>,
     ) -> Result<Vec<R>, Error>
     where
-        M: Model<'q, DB, E>,
         R: Send + Unpin + for<'r> FromRow<'r, DB::Row>,
     {
         self.with_command(QueryCommand::Select(
             QuerySelectCommand::Fields(fields.into()),
-            M::TABLE_NAME,
+            self.table_name()?,
         ));
 
-        M::select_fields_all::<M, R>(self).await
+        self.fetch_fields_all().await
     }
 
-    pub async fn select_scalar<M, R>(&mut self, field: &'q str) -> Result<R, Error>
+    pub async fn select_scalar<R>(&mut self, field: &'q str) -> Result<R, Error>
     where
-        M: Model<'q, DB, E>,
         R: Send + Unpin + 'q,
         R: for<'r> Encode<'r, DB> + for<'r> Decode<'r, DB> + Type<DB>,
         (R,): for<'r> FromRow<'r, DB::Row>,
     {
         self.with_command(QueryCommand::Select(
             QuerySelectCommand::Fields([field].into()),
-            M::TABLE_NAME,
+            self.table_name()?,
         ));
 
-        M::select_scalar::<M, R>(self).await
+        self.fetch_scalar_one().await
     }
 
-    pub async fn select_scalar_all<M, R>(&mut self, field: &'q str) -> Result<Vec<R>, Error>
+    pub async fn select_scalar_all<R>(&mut self, field: &'q str) -> Result<Vec<R>, Error>
     where
-        M: Model<'q, DB, E>,
         R: Send + Unpin + 'q,
         R: for<'r> Encode<'r, DB> + for<'r> Decode<'r, DB> + Type<DB>,
         (R,): for<'r> FromRow<'r, DB::Row>,
     {
         self.with_command(QueryCommand::Select(
             QuerySelectCommand::Fields([field].into()),
-            M::TABLE_NAME,
+            self.table_name()?,
         ));
 
-        M::select_scalar_all::<M, R>(self).await
+        self.fetch_scalar_all().await
     }
 
     #[cfg(feature = "serde")]
@@ -204,17 +206,17 @@ where
     }
 
     #[cfg(not(feature = "serde"))]
-    pub async fn update<M: Model<'q, DB, E>>(&mut self, value: QueryMap) -> Result<(), Error> {
-        self.update_map::<M>(value).await
+    pub async fn update<I: QueryMapInput<'q>>(&mut self, value: &'q I) -> Result<(), Error> {
+        self.update_map(value).await
     }
 
-    pub async fn update_map<M: Model<'q, DB, E>>(&mut self, set: QueryMap) -> Result<(), Error> {
-        self.with_command(QueryCommand::Update(M::TABLE_NAME, set));
+    pub async fn update_map<I: QueryMapInput<'q>>(&mut self, value: &'q I) -> Result<(), Error> {
+        self.with_command(QueryCommand::Update(self.table_name()?, value.to_map()));
         self.execute().await
     }
 
     pub async fn delete<M: Model<'q, DB, E>>(mut self) -> Result<(), Error> {
-        self.with_command(QueryCommand::Delete(M::TABLE_NAME));
+        self.with_command(QueryCommand::Delete(self.table_name()?));
         self.execute().await
     }
 
@@ -498,7 +500,7 @@ impl<'q> Display for QueryCommand<'q> {
 mod tests {
     use crate::prelude::*;
     use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
-    use sqlx::{FromRow, SqlitePool};
+    use sqlx::{FromRow, Sqlite, SqlitePool};
     use std::str::FromStr;
     use uuid::Uuid;
 
@@ -551,7 +553,7 @@ mod tests {
             .or(eq("pid", Uuid::new_v4()));
 
         #[cfg(not(feature = "serde"))]
-        let map = query_map! { "users",
+        let map = query_map! {
           "name": "Demo User",
           "age": 34
         };
@@ -562,14 +564,15 @@ mod tests {
           "age": 34
         });
 
-        let mut qb = QB::new(&pool);
-        qb.set_modifiers(&modifiers);
+        let mut qb = QB::new(&pool)
+            .with_modifiers(&modifiers)
+            .with_table_name(<TestUserModel as Model<Sqlite, &SqlitePool>>::TABLE_NAME);
 
         #[cfg(feature = "serde")]
-        qb.update::<TestUserModel, _>(map).await.ok();
+        qb.update(&map).await.ok();
 
         #[cfg(not(feature = "serde"))]
-        qb.update::<TestUserModel>(map).await.ok();
+        qb.update(&map).await.ok();
 
         assert_eq!(
             qb.sql_str(),

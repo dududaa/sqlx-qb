@@ -3,6 +3,7 @@ use std::fmt::Display;
 
 #[cfg(feature = "serde")]
 use {serde::Serialize, serde_json::Value, sqlx::Error};
+use crate::model::QueryMapInput;
 use crate::prelude::ModelInsert;
 
 #[cfg(not(feature = "serde"))]
@@ -63,13 +64,13 @@ impl<'q> QueryMap {
     }
 }
 
-pub struct QueryInput<'q> {
+pub struct MapInput<'q> {
     map: QueryMap,
-    table_name: &'q str
+    table_name: Option<&'q str>
 }
 
-impl<'q> QueryInput<'q> {
-    pub fn new(table_name: &'q str) -> Self {
+impl<'q> MapInput<'q> {
+    pub fn new(table_name: Option<&'q str>) -> Self {
         Self { table_name, map: QueryMap::new() }
     }
 
@@ -78,9 +79,8 @@ impl<'q> QueryInput<'q> {
     }
 }
 
-impl<'q> ModelInsert<'q> for QueryInput<'q> {
-    type InsertReturns = ();
-    fn table_name(&'q self) -> &'q str {
+impl<'q> QueryMapInput<'q> for MapInput<'q> {
+    fn table_name(&'q self) -> Option<&'q str> {
         self.table_name
     }
 
@@ -89,10 +89,13 @@ impl<'q> ModelInsert<'q> for QueryInput<'q> {
     }
 }
 
+impl<'q> ModelInsert<'q, ()> for MapInput<'q> {}
+
+
 #[macro_export]
 macro_rules! query_map {
-    ( $table_name:literal, $( $key:literal : $value:expr ),* $(,)? ) => {{
-        let mut input = QueryInput::new($table_name);
+    ( $( $key:literal : $value:expr ),* $(,)? ) => {{
+        let mut input = MapInput::new(None);
 
         $(
             input.add($key, $value);
