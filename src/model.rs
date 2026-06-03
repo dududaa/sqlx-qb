@@ -3,9 +3,12 @@ use sqlx::{Database, Decode, Encode, Executor, IntoArguments, Type};
 use std::future::Future;
 use crate::prelude::FromRow;
 
-pub trait Model: Sized + Send + Unpin {
+pub trait Model: ModelInsert + Sized + Send + Unpin {
     const TABLE_NAME: &'static str;
     const PRIMARY_COLUMN: &'static str;
+}
+
+pub trait ModelInsert {
     type InsertReturns;
 
     fn insert<'q, DB, E>(qb: &mut QB<'q, DB, E>) -> impl Future<Output = Result<(), sqlx::Error>>
@@ -37,13 +40,4 @@ pub trait Model: Sized + Send + Unpin {
             Ok(res)
         }
     }
-}
-
-pub trait ModelInsertArg<M, E>
-where
-    M: Model,
-{
-    type Returns;
-
-    fn insert(self, pool: E) -> impl Future<Output = Result<Self::Returns, sqlx::Error>> + Send;
 }

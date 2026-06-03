@@ -23,7 +23,9 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
         impl Model for #ident {
             const TABLE_NAME: &'static str = #table_name;
             const PRIMARY_COLUMN: &'static str = #primary_column;
-
+        }
+        
+        impl ModelInsert for #ident {
             type InsertReturns = #insert_returns;
         }
     };

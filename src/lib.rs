@@ -17,7 +17,7 @@ pub mod prelude {
     pub use std::future::Future;
 }
 
-use crate::model::{Model, ModelInsertArg};
+use crate::model::Model;
 use crate::query::{Query, QueryAs, QueryScalar};
 use map::QueryMap;
 use modifiers::QueryModifiers;
@@ -127,15 +127,6 @@ where
         }
 
         res
-    }
-
-    #[deprecated]
-    pub async fn insert_args<M, A>(&self, args: A) -> Result<A::Returns, Error>
-    where
-        M: Model,
-        A: ModelInsertArg<M, E>,
-    {
-        args.insert(self.pool.clone()).await
     }
 
     pub async fn select<M>(&mut self) -> Result<M, Error>
