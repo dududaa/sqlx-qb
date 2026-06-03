@@ -13,21 +13,37 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
         Ok(v) => v,
         Err(e) => return TokenStream::from(e.write_errors()),
     };
-    
+
     let ident = &input.ident;
     let table_name = to_snake_case(&args.table_name);
     let primary_column = args.primary_column;
     let insert_returns = args.insert_returns;
-    
+
     let expanded = quote! {
-        impl Model for #ident {
+        impl<'q, DB, E> Model<'q, DB, E> for #ident
+        where
+            DB: Database,
+            E: Executor<'q, Database = DB> + Clone,
+            DB::Arguments: IntoArguments<DB>,
+            String: sqlx::Encode<'q, DB>,
+            String: sqlx::Type<DB>,
+        {
             const TABLE_NAME: &'static str = #table_name;
             const PRIMARY_COLUMN: &'static str = #primary_column;
         }
-        
-        impl ModelInsert for #ident {
+
+        impl<'q> ModelInsert<'q> for #ident {
             type InsertReturns = #insert_returns;
         }
+
+        impl<'q, DB, E> ModelSelect<'q, DB, E> for #ident
+        where
+            DB: Database,
+            E: Executor<'q, Database = DB> + Clone,
+            DB::Arguments: IntoArguments<DB>,
+            String: sqlx::Encode<'q, DB>,
+            String: sqlx::Type<DB>,
+        {}
     };
 
     TokenStream::from(expanded)

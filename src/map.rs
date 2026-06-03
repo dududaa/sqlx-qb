@@ -3,6 +3,7 @@ use std::fmt::Display;
 
 #[cfg(feature = "serde")]
 use {serde::Serialize, serde_json::Value, sqlx::Error};
+use crate::prelude::ModelInsert;
 
 #[cfg(not(feature = "serde"))]
 #[derive(Clone)]
@@ -13,7 +14,7 @@ pub struct QueryMap(BTreeMap<String, String>);
 #[derive(Serialize)]
 pub struct QueryMap(BTreeMap<String, String>);
 
-impl QueryMap {
+impl<'q> QueryMap {
     pub fn new() -> Self {
         let map = BTreeMap::new();
         QueryMap(map)
@@ -62,20 +63,41 @@ impl QueryMap {
     }
 }
 
-impl Default for QueryMap {
-    fn default() -> Self {
-        Self::new()
+pub struct QueryInput<'q> {
+    map: QueryMap,
+    table_name: &'q str
+}
+
+impl<'q> QueryInput<'q> {
+    pub fn new(table_name: &'q str) -> Self {
+        Self { table_name, map: QueryMap::new() }
+    }
+
+    pub fn add(&mut self, key: impl Display, value: impl Display) {
+        self.map.add(key.to_string(), value.to_string());
+    }
+}
+
+impl<'q> ModelInsert<'q> for QueryInput<'q> {
+    type InsertReturns = ();
+    fn table_name(&'q self) -> &'q str {
+        self.table_name
+    }
+
+    fn to_map(&'q self) -> QueryMap {
+        self.map.clone()
     }
 }
 
 #[macro_export]
 macro_rules! query_map {
-    ( $( $key:literal : $value:expr ),* $(,)? ) => {{
-        let mut map = QueryMap::new();
+    ( $table_name:literal, $( $key:literal : $value:expr ),* $(,)? ) => {{
+        let mut input = QueryInput::new($table_name);
+
         $(
-            map.add($key, $value);
+            input.add($key, $value);
         )*
 
-        map
+        input
     }};
 }
