@@ -89,8 +89,7 @@ impl<'q> QueryMapInput<'q> for MapInput<'q> {
     }
 }
 
-impl<'q> ModelInsert<'q, ()> for MapInput<'q> {}
-
+// impl<'q> ModelInsert<'q, ()> for MapInput<'q> {}
 
 #[macro_export]
 macro_rules! query_map {
@@ -104,3 +103,12 @@ macro_rules! query_map {
         input
     }};
 }
+
+#[macro_export]
+macro_rules! impl_type_for_query_map {
+    () => {
+        impl<'q, Returns> ModelInsert<'q, Returns> for MapInput<'q> {}
+    };
+}
+
+impl_type_for_query_map!();

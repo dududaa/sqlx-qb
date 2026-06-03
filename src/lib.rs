@@ -76,16 +76,13 @@ where
     }
 
     #[cfg(not(feature = "serde"))]
-    pub async fn insert<Returns, I: ModelInsert<'q, Returns>>(
-        &'q mut self,
-        map: &'q I,
-    ) -> Result<(), Error> {
+    pub async fn insert<I: ModelInsert<'q, ()>>(&mut self, map: &'q I) -> Result<(), Error> {
         map.insert(self).await
     }
 
     #[cfg(not(feature = "serde"))]
     pub async fn insert_returns<Returns, I: ModelInsert<'q, Returns>>(
-        &'q mut self,
+        &mut self,
         map: &'q I,
         column: &'q str,
     ) -> Result<Returns, Error>
@@ -97,7 +94,7 @@ where
     }
 
     #[cfg(feature = "serde")]
-    pub async fn insert<M: Model, T: Serialize>(&'q mut self, value: &'q T) -> Result<(), Error> {
+    pub async fn insert<M: Model, T: Serialize>(&mut self, value: &'q T) -> Result<(), Error> {
         let map = QueryMap::from_value(value)?;
         M::insert(self, map).await
     }
@@ -105,7 +102,7 @@ where
     #[cfg(feature = "serde")]
     /// Insert data and returns the specified `column`. Call this ONLY if your database supports RETURNING statement.
     pub async fn insert_returns<M: Model, T: Serialize>(
-        &'q mut self,
+        &mut self,
         value: &'q T,
         column: &'q str,
     ) -> Result<M::InsertReturns, Error>
@@ -215,7 +212,7 @@ where
         self.execute().await
     }
 
-    pub async fn delete<M: Model<'q, DB, E>>(mut self) -> Result<(), Error> {
+    pub async fn delete(mut self) -> Result<(), Error> {
         self.with_command(QueryCommand::Delete(self.table_name()?));
         self.execute().await
     }
@@ -324,6 +321,10 @@ where
                 self.args.push(parsed);
             }
         }
+    }
+
+    pub fn modifiers(&self) -> Option<&'q QueryModifiers<'q>> {
+        self.modifiers
     }
 
     pub fn set_modifiers(&mut self, modifiers: &'q QueryModifiers<'q>) {
@@ -460,11 +461,11 @@ impl<'q> Display for QueryCommand<'q> {
                     .collect::<Vec<_>>();
 
                 let returning = returns
-                    .map(|col| format!("RETURNING {}", col))
+                    .map(|col| format!(" RETURNING {}", col))
                     .unwrap_or_default();
 
                 format!(
-                    "INSERT INTO {} ({}) VALUES ({}) {}",
+                    "INSERT INTO {} ({}) VALUES ({}){}",
                     table_name,
                     columns.join(", "),
                     values.join(", "),
@@ -510,6 +511,8 @@ mod tests {
     #[derive(Model, FromRow)]
     #[model(table_name = "users")]
     struct TestUserModel {}
+
+    const TABLE_NAME: &'static str = <TestUserModel as Model<Sqlite, &SqlitePool>>::TABLE_NAME;
 
     async fn pool() -> SqlitePool {
         let connection_options = SqliteConnectOptions::from_str("file::memory:?cache=shared")
@@ -566,7 +569,7 @@ mod tests {
 
         let mut qb = QB::new(&pool)
             .with_modifiers(&modifiers)
-            .with_table_name(<TestUserModel as Model<Sqlite, &SqlitePool>>::TABLE_NAME);
+            .with_table_name(TABLE_NAME);
 
         #[cfg(feature = "serde")]
         qb.update(&map).await.ok();
@@ -580,30 +583,30 @@ mod tests {
         );
     }
 
-    // #[tokio::test]
-    // async fn test_insert_query_sql_str() {
-    //     let pool = pool().await;
-    //
-    //     #[cfg(not(feature = "serde"))]
-    //     let map = query_map! {
-    //       "name": "Demo User",
-    //       "age": 34
-    //     };
-    //
-    //     #[cfg(feature = "serde")]
-    //     let map = &json! ({
-    //       "name": "Demo User",
-    //       "age": 34
-    //     });
-    //
-    //     let mut qb = QB::new(&pool);
-    //     qb.insert::<TestUserModel, _>(map).await.ok();
-    //
-    //     assert_eq!(
-    //         qb.sql_str(),
-    //         "INSERT INTO users (age, name) VALUES ($1, $2)"
-    //     )
-    // }
+    #[tokio::test]
+    async fn test_insert_query_sql_str() {
+        let pool = pool().await;
+
+        #[cfg(not(feature = "serde"))]
+        let map = query_map! {
+          "name": "Demo User",
+          "age": 34
+        };
+
+        #[cfg(feature = "serde")]
+        let map = &json! ({
+          "name": "Demo User",
+          "age": 34
+        });
+
+        let mut qb = QB::new(&pool).with_table_name(TABLE_NAME);
+        let _res = qb.insert(&map).await;
+
+        assert_eq!(
+            qb.sql_str(),
+            "INSERT INTO users (age, name) VALUES ($1, $2)"
+        );
+    }
 
     #[tokio::test]
     async fn test_order_by() {

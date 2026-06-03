@@ -84,9 +84,11 @@ pub trait ModelInsert<'q, InsertReturns>: QueryMapInput<'q> {
         String: sqlx::Encode<'q, DB> + sqlx::Type<DB>,
     {
         async move {
+            // Make sure whoever calls either passes table_name to `qb.set_table_name` or `ModelInsert` derive.
+            // Or this will set NULL as table.
             let table_name = self
                 .table_name()
-                .unwrap_or(qb.table_name().expect("missing table name"));
+                .unwrap_or(qb.table_name().unwrap_or("NULL"));
 
             qb.with_command(QueryCommand::Insert {
                 table_name,
@@ -94,16 +96,16 @@ pub trait ModelInsert<'q, InsertReturns>: QueryMapInput<'q> {
                 returning,
             });
 
-            let modifiers = qb.modifiers;
+            let modifiers = qb.modifiers();
 
             qb.reset_modifiers();
-            let res = execution(qb).await;
+            let exec_result = execution(qb).await;
 
             if let Some(modifiers) = modifiers {
                 qb.set_modifiers(modifiers);
             }
 
-            res
+            exec_result
         }
     }
 }
