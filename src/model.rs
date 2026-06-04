@@ -91,7 +91,6 @@ pub trait ModelInsert<'q, InsertReturns>: QueryMapInput<'q, InsertReturns> {
                 .unwrap_or(qb.table_name().unwrap_or("NULL"));
 
             let map = self.to_map()?;
-            println!("table_in: {table_name}, map_in: {map:?}");
             qb.with_command(QueryCommand::Insert {
                 table_name,
                 map,

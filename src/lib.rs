@@ -634,17 +634,13 @@ mod tests {
                 "age": 34
             }?;
 
-            let data = serde_json::to_string(&jmap).unwrap();
-            println!("map_raw: {data}");
             let _res = qb.insert(&jmap).await?;
-            println!("jmap: {}", qb.sql_str());
             assert_eq!(
                 qb.sql_str(),
                 "INSERT INTO users (age, name) VALUES ($1, $2)"
             );
 
             let _res: i32 = qb.insert_returns(&jmap, "id").await?;
-            println!("jmap: {}", qb.sql_str());
             assert_eq!(
                 qb.sql_str(),
                 "INSERT INTO users (age, name) VALUES ($1, $2) RETURNING id"
@@ -656,7 +652,6 @@ mod tests {
             };
 
             let _res = qb.insert_returns(&map, "id").await?;
-            println!("map: {}", qb.sql_str());
             assert_eq!(
                 qb.sql_str(),
                 "INSERT INTO users (age, name) VALUES ($1, $2) RETURNING id"

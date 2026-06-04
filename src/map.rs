@@ -1,6 +1,5 @@
 use crate::model::QueryMapInput;
 use crate::prelude::ModelInsert;
-use serde::de::DeserializeOwned;
 use std::collections::BTreeMap;
 use std::fmt::Display;
 #[cfg(feature = "serde")]
