@@ -86,9 +86,10 @@ pub trait ModelInsert<'q, InsertReturns>: QueryMapInput<'q, InsertReturns> {
         async move {
             // Make sure whoever calls this either passes table_name to `qb.set_table_name` or `ModelInsert` derive.
             // Or this will set NULL as query table name.
+            let def_table_name = qb.table_name().unwrap_or("NULL").to_string();
             let table_name = self
                 .table_name()
-                .unwrap_or(qb.table_name().unwrap_or("NULL"));
+                .unwrap_or(def_table_name);
 
             let map = self.to_map()?;
             qb.with_command(QueryCommand::Insert {
@@ -113,7 +114,7 @@ pub trait ModelInsert<'q, InsertReturns>: QueryMapInput<'q, InsertReturns> {
 
 pub trait QueryMapInput<'q, R> {
     /// Return name of table
-    fn table_name(&'q self) -> Option<&'q str>;
+    fn table_name(&'q self) -> Option<String>;
 
     fn to_map(&'q self) -> Result<QueryMap, Error>;
 }

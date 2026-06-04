@@ -108,13 +108,13 @@ impl MapInput {
 }
 
 #[cfg(not(feature = "serde"))]
-impl QueryMapInput for MapInput {
-    fn table_name(&'q self) -> Option<&'q str> {
-        self.table_name
+impl<'q, R> QueryMapInput<'q, R> for MapInput {
+    fn table_name(&self) -> Option<String> {
+        self.table_name.clone()
     }
 
-    fn to_map(&'q self) -> QueryMap {
-        self.map.clone()
+    fn to_map(&'q self) -> Result<QueryMap, sqlx::Error> {
+        Ok(self.map.clone())
     }
 }
 

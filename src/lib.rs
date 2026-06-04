@@ -17,7 +17,7 @@ pub mod prelude {
     pub use std::future::Future;
 }
 
-use crate::model::{Model, ModelInsert};
+use crate::model::{Model, ModelInsert, QueryMapInput};
 use crate::query::{Query, QueryAs, QueryScalar};
 use map::QueryMap;
 use modifiers::QueryModifiers;
@@ -207,8 +207,8 @@ where
     }
 
     #[cfg(not(feature = "serde"))]
-    pub async fn update<I: QueryMapInput<'q>>(&mut self, value: &'q I) -> Result<(), Error> {
-        self.with_command(QueryCommand::Update(self.table_name()?, value.to_map()));
+    pub async fn update<I: QueryMapInput<'q, ()>>(&mut self, value: &'q I) -> Result<(), Error> {
+        self.with_command(QueryCommand::Update(self.table_name()?, value.to_map()?));
         self.execute().await
     }
 
@@ -428,7 +428,7 @@ enum QuerySelectCommand<'q> {
 
 enum QueryCommand<'q> {
     Insert {
-        table_name: &'q str,
+        table_name: String,
         map: QueryMap,
         /// The column the table should return after creating.
         returning: Option<&'q str>,
@@ -500,7 +500,6 @@ impl<'q> Display for QueryCommand<'q> {
 #[cfg(test)]
 mod tests {
     use crate::prelude::*;
-    use serde::Serialize;
     use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
     use sqlx::{FromRow, Sqlite, SqlitePool};
     use std::str::FromStr;
@@ -509,7 +508,10 @@ mod tests {
     use crate::json_map;
     use qb_macro::ModelInsert;
     #[cfg(feature = "serde")]
-    use serde_json::json;
+    use {
+        serde_json::json,
+        serde::Serialize
+    };
 
     #[derive(Model, FromRow)]
     #[model(table_name = "users")]
@@ -617,12 +619,14 @@ mod tests {
 
         #[cfg(not(feature = "serde"))]
         {
+            let mut qb = QB::new(&pool).with_table_name(TABLE_NAME);
             let map = query_map! {
               "name": "Demo User",
               "age": 34
             };
 
-            let res = qb.insert_returns(&map, "id").await?;
+            let _res = qb.insert(&map).await?;
+            let _res: i32 = qb.insert_returns(&map, "id").await?;
         }
 
         #[cfg(feature = "serde")]
