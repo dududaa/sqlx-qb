@@ -169,8 +169,8 @@ macro_rules! impl_type_for_query_map {
         impl<'q, Returns, T: Serialize + ModelInsert<'q, Returns>> QueryMapInput<'q, Returns>
             for T
         {
-            fn table_name(&'q self) -> Option<&'q str> {
-                Self::TABLE_NAME
+            fn table_name(&'q self) -> Option<String> {
+                Self::TABLE_NAME.map(|s| s.to_string())
             }
 
             fn to_map(&'q self) -> Result<QueryMap, Error> {

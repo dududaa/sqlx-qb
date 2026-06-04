@@ -17,7 +17,7 @@ pub mod prelude {
     pub use std::future::Future;
 }
 
-use crate::model::{Model, ModelInsert, QueryMapInput};
+use crate::model::{Model, ModelInsert};
 use crate::query::{Query, QueryAs, QueryScalar};
 use map::QueryMap;
 use modifiers::QueryModifiers;
@@ -26,7 +26,8 @@ use std::fmt::{Display, Formatter};
 use std::ops::{Deref, DerefMut};
 
 #[cfg(not(feature = "serde"))]
-use crate::prelude::MapInput;
+use crate::model::QueryMapInput;
+
 #[cfg(feature = "serde")]
 use serde::Serialize;
 
@@ -505,13 +506,8 @@ mod tests {
     use std::str::FromStr;
     use uuid::Uuid;
 
-    use crate::json_map;
-    use qb_macro::ModelInsert;
     #[cfg(feature = "serde")]
-    use {
-        serde_json::json,
-        serde::Serialize
-    };
+    use {crate::json_map, qb_macro::ModelInsert, serde::Serialize, serde_json::json};
 
     #[derive(Model, FromRow)]
     #[model(table_name = "users")]
@@ -541,7 +537,6 @@ mod tests {
 
         sqlx::query(
             "
-            DROP TABLE IF EXISTS users;
             CREATE TABLE IF NOT EXISTS users (
                 id PRIMARY KEY,
                 name TEXT NOT NULL,
