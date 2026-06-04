@@ -14,7 +14,7 @@ pub mod prelude {
     pub use crate::QB;
     pub use qb_macro::Model;
     #[cfg(feature = "serde")]
-    pub use crate::model::ModelInsert;
+    pub use qb_macro::ModelInsert;
     pub use sqlx::{Database, Executor, FromRow, IntoArguments};
     pub use std::future::Future;
 }
