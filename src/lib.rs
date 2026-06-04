@@ -507,20 +507,11 @@ mod tests {
     use uuid::Uuid;
 
     #[cfg(feature = "serde")]
-    use {crate::json_map, qb_macro::ModelInsert, serde::Serialize, serde_json::json};
+    use {qb_macro::ModelInsert, serde::Serialize, serde_json::json};
 
     #[derive(Model, FromRow)]
     #[model(table_name = "users")]
     struct TestUserModel {}
-
-    #[cfg(feature = "serde")]
-    #[derive(ModelInsert, Serialize)]
-    // #[model(table_name = "users")]
-    #[model(insert_returns = "i32")]
-    struct InsertArg {
-        name: String,
-        age: i32,
-    }
 
     const TABLE_NAME: &'static str = <TestUserModel as Model<Sqlite, &SqlitePool>>::TABLE_NAME;
 
@@ -608,6 +599,15 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "serde")]
+    #[derive(ModelInsert, Serialize)]
+    // #[model(table_name = "users")]
+    #[model(insert_returns = "i32")]
+    struct InsertArg {
+        name: String,
+        age: i32,
+    }
+
     #[tokio::test]
     async fn test_insert_query_sql_str() -> Result<(), sqlx::Error> {
         let pool = pool().await;
@@ -621,29 +621,21 @@ mod tests {
             };
 
             let _res = qb.insert(&map).await?;
-            let _res: i32 = qb.insert_returns(&map, "id").await?;
-        }
-
-        #[cfg(feature = "serde")]
-        {
-            let mut qb = QB::new(&pool).with_table_name(TABLE_NAME);
-            let jmap = json_map! {
-                TABLE_NAME.parse().unwrap(),
-                "name": "Demo User",
-                "age": 34
-            }?;
-
-            let _res = qb.insert(&jmap).await?;
             assert_eq!(
                 qb.sql_str(),
                 "INSERT INTO users (age, name) VALUES ($1, $2)"
             );
 
-            let _res: i32 = qb.insert_returns(&jmap, "id").await?;
+            let _res: i32 = qb.insert_returns(&map, "id").await?;
             assert_eq!(
                 qb.sql_str(),
                 "INSERT INTO users (age, name) VALUES ($1, $2) RETURNING id"
             );
+        }
+
+        #[cfg(feature = "serde")]
+        {
+            let mut qb = QB::new(&pool).with_table_name(TABLE_NAME);
 
             let map = InsertArg {
                 name: "Demo User".to_string(),
@@ -651,6 +643,23 @@ mod tests {
             };
 
             let _res = qb.insert_returns(&map, "id").await?;
+            assert_eq!(
+                qb.sql_str(),
+                "INSERT INTO users (age, name) VALUES ($1, $2) RETURNING id"
+            );
+
+            let map = query_map! { TABLE_NAME.parse().unwrap(),
+              "name": "Demo User",
+              "age": 34
+            };
+
+            let _res = qb.insert(&map).await?;
+            assert_eq!(
+                qb.sql_str(),
+                "INSERT INTO users (age, name) VALUES ($1, $2)"
+            );
+
+            let _res: i32 = qb.insert_returns(&map, "id").await?;
             assert_eq!(
                 qb.sql_str(),
                 "INSERT INTO users (age, name) VALUES ($1, $2) RETURNING id"

@@ -130,8 +130,8 @@ macro_rules! query_map {
         input
     }};
 
-    ( $( $table_name:expr, $key:literal : $value:expr ),* $(,)? ) => {{
-        let mut input = MapInput::new($table_name);
+    ( $table_name:expr, $( $key:literal : $value:expr ),* $(,)? ) => {{
+        let mut input = MapInput::new(Some($table_name));
 
         $(
             input.add($key, $value);
@@ -141,24 +141,24 @@ macro_rules! query_map {
     }};
 }
 
-#[macro_export]
-macro_rules! json_map {
-    ( $table_name:expr, $( $key:literal : $value:expr ),* $(,)? ) => {{
-        let data = json! ({
-          $( $key : $value ),*
-        });
-
-        QueryMap::from_value(&data).map(|map| MapInput::new(Some($table_name)).with_map(map))
-    }};
-
-    ( $( $key:literal : $value:expr ),* $(,)? ) => {{
-        let data = json! ({
-          $( $key : $value ),*
-        });
-
-        QueryMap::from_value(&data).map(|map| MapInput::new(None).with_map(map))
-    }};
-}
+// #[macro_export]
+// macro_rules! json_map {
+//     ( $table_name:expr, $( $key:literal : $value:expr ),* $(,)? ) => {{
+//         let data = json! ({
+//           $( $key : $value ),*
+//         });
+//
+//         QueryMap::from_value(&data).map(|map| MapInput::new(Some($table_name)).with_map(map))
+//     }};
+//
+//     ( $( $key:literal : $value:expr ),* $(,)? ) => {{
+//         let data = json! ({
+//           $( $key : $value ),*
+//         });
+//
+//         QueryMap::from_value(&data).map(|map| MapInput::new(None).with_map(map))
+//     }};
+// }
 
 #[macro_export]
 macro_rules! impl_type_for_query_map {

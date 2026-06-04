@@ -3,8 +3,8 @@
 A simple query builder for [SQLx](https://github.com/launchbadge/sqlx).
 
 If you use rust SQLx, you most likely realize how great the library is. However, you have to write (and rewrite) raw
-queries
-for every single task no matter how simple. This is where [SqlxQB](#sqlx-qb) comes in. It aims to simplify the process
+queries for every single task no matter how simple. This is where [SqlxQB](#sqlx-qb) comes in. It aims to simplify the
+process
 of writing simple CRUD queries by providing APIs that write the queries for you and map the results to your models.
 
 > **⚠️ Status: Early-stage project**<br>
@@ -51,6 +51,9 @@ struct UserModel {
 #### 2. Create `QB` instance and starting using the interfaces.
 
 ```rust
+/// This is optional depending on your query. See below.
+const TABLE_NAME: &'static str = "users";
+
 async fn main() -> anyhow::Result<()> {
     // create SQLx pool by yourself.
     let pool = PgPoolOptions::new()
@@ -58,7 +61,7 @@ async fn main() -> anyhow::Result<()> {
         .connect(&url)
         .await?;
 
-    let mut qb = QB::<UserModel>::new(&pool); // create mutable QB instance
+    let mut qb = QB::<UserModel>::new(&pool).with_table_name(TABLE_NAME); // Create mutable QB instance and optionally set the table name.
 }
 ```
 
@@ -68,14 +71,32 @@ async fn main() -> anyhow::Result<()> {
 async fn main() -> anyhow::Result<()> {
     // ...
     // Define the input map.
-    // If you enable "serde" feature, you can also pass any struct that implements serde::Serialize
-    let map = query_map! {
+    let map = query_map! { TABLE_NAME, // optionally pass table_name
       "name": "Demo User",
       "age": 34
     };
 
-    qb.insert(map).await?; // INSERT INTO users (name, age) VALUES ("Demo User", 34)
-}
+    qb.insert(&map).await?; // INSERT INTO users (name, age) VALUES ("Demo User", 34)
+    let id = qb.insert_returns(&map, "id").await?; // Insert and return a field IF YOUR DATABASE SUPPORTS RETURNING.
+
+    // If you enable "serde" feature, you can also pass any struct that implements serde::Serialize and ModelInsert:
+    #[derive(ModelInsert, Serialize)]
+    // #[model(table_name = "users")]
+    // #[model(insert_returns = "i32")] forces type of field to return on insertion
+    struct InsertArg {
+        name: String,
+        age: i32,
+    }
+
+    let map = InsertArg {
+        name: "Demo User".to_string(),
+        age: 34,
+    };
+
+    qb.insert(&map).await?;
+    let id = qb.insert_returns(&map, "id").await?;
+}    
+    
 ```
 
 ###### RETRIEVE models
@@ -99,7 +120,7 @@ async fn main() -> anyhow::Result<()> {
     // What if you only need to get specific fields of the model?
     let total_rows = qb.select_scalar("Count(*)").await?; // select one field
     let (id, name) = qb.select_fields(["id", "name"]).await?; // select multiple fields
-    
+
     // There's a simple get method that simply retrieves one row using the specified primary column.
     let user = qb.get().await?;
 }
