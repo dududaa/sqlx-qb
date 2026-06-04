@@ -30,7 +30,7 @@ where
     }
 }
 
-pub trait ModelInsert<'q, InsertReturns>: QueryMapInput<'q> {
+pub trait ModelInsert<'q, InsertReturns>: QueryMapInput<'q, InsertReturns> {
     const TABLE_NAME: Option<&'q str> = None;
 
     fn insert<DB, E>(&'q self, qb: &mut QB<'q, DB, E>) -> impl Future<Output = Result<(), Error>>
@@ -45,7 +45,7 @@ pub trait ModelInsert<'q, InsertReturns>: QueryMapInput<'q> {
             self.execute_insert::<_, _, DB, E>(qb, None, async |qb: &QB<'q, DB, E>| {
                 qb.execute().await
             })
-            .await
+            .await?
         }
     }
 
@@ -67,7 +67,7 @@ pub trait ModelInsert<'q, InsertReturns>: QueryMapInput<'q> {
             self.execute_insert::<_, _, DB, E>(qb, Some(returning), async |qb: &QB<'q, DB, E>| {
                 qb.fetch_scalar_one().await
             })
-            .await
+            .await?
         }
     }
     fn execute_insert<R, F, DB, E>(
@@ -75,7 +75,7 @@ pub trait ModelInsert<'q, InsertReturns>: QueryMapInput<'q> {
         qb: &mut QB<'q, DB, E>,
         returning: Option<&'q str>,
         execution: F,
-    ) -> impl Future<Output = R>
+    ) -> impl Future<Output = Result<R, Error>>
     where
         F: AsyncFn(&QB<'q, DB, E>) -> R + 'q,
         DB: Database,
@@ -84,15 +84,17 @@ pub trait ModelInsert<'q, InsertReturns>: QueryMapInput<'q> {
         String: sqlx::Encode<'q, DB> + sqlx::Type<DB>,
     {
         async move {
-            // Make sure whoever calls either passes table_name to `qb.set_table_name` or `ModelInsert` derive.
-            // Or this will set NULL as table.
+            // Make sure whoever calls this either passes table_name to `qb.set_table_name` or `ModelInsert` derive.
+            // Or this will set NULL as query table name.
             let table_name = self
                 .table_name()
                 .unwrap_or(qb.table_name().unwrap_or("NULL"));
 
+            let map = self.to_map()?;
+            println!("table_in: {table_name}, map_in: {map:?}");
             qb.with_command(QueryCommand::Insert {
                 table_name,
-                map: self.to_map(),
+                map,
                 returning,
             });
 
@@ -105,14 +107,14 @@ pub trait ModelInsert<'q, InsertReturns>: QueryMapInput<'q> {
                 qb.set_modifiers(modifiers);
             }
 
-            exec_result
+            Ok(exec_result)
         }
     }
 }
 
-pub trait QueryMapInput<'q> {
+pub trait QueryMapInput<'q, R> {
     /// Return name of table
     fn table_name(&'q self) -> Option<&'q str>;
 
-    fn to_map(&'q self) -> QueryMap;
+    fn to_map(&'q self) -> Result<QueryMap, Error>;
 }

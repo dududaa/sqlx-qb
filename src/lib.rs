@@ -17,7 +17,7 @@ pub mod prelude {
     pub use std::future::Future;
 }
 
-use crate::model::{Model, ModelInsert, QueryMapInput};
+use crate::model::{Model, ModelInsert};
 use crate::query::{Query, QueryAs, QueryScalar};
 use map::QueryMap;
 use modifiers::QueryModifiers;
@@ -25,6 +25,8 @@ use sqlx::{Database, Decode, Encode, Error, Executor, FromRow, IntoArguments, Ty
 use std::fmt::{Display, Formatter};
 use std::ops::{Deref, DerefMut};
 
+#[cfg(not(feature = "serde"))]
+use crate::prelude::MapInput;
 #[cfg(feature = "serde")]
 use serde::Serialize;
 
@@ -94,25 +96,25 @@ where
     }
 
     #[cfg(feature = "serde")]
-    pub async fn insert<M: Model, T: Serialize>(&mut self, value: &'q T) -> Result<(), Error> {
-        let map = QueryMap::from_value(value)?;
-        M::insert(self, map).await
+    pub async fn insert<T: Serialize + ModelInsert<'q, ()>>(
+        &mut self,
+        value: &'q T,
+    ) -> Result<(), Error> {
+        value.insert(self).await
     }
 
     #[cfg(feature = "serde")]
     /// Insert data and returns the specified `column`. Call this ONLY if your database supports RETURNING statement.
-    pub async fn insert_returns<M: Model, T: Serialize>(
+    pub async fn insert_returns<R, T: Serialize + ModelInsert<'q, R>>(
         &mut self,
         value: &'q T,
         column: &'q str,
-    ) -> Result<M::InsertReturns, Error>
+    ) -> Result<R, Error>
     where
-        M::InsertReturns:
-            for<'r> Encode<'r, DB> + for<'r> Decode<'r, DB> + Type<DB> + Send + Unpin + 'q,
-        (M::InsertReturns,): for<'r> FromRow<'r, DB::Row>,
+        R: for<'r> Encode<'r, DB> + for<'r> Decode<'r, DB> + Type<DB> + Send + Unpin + 'q,
+        (R,): for<'r> FromRow<'r, DB::Row>,
     {
-        let map = QueryMap::from_value(value)?;
-        M::insert_returns(self, map, column).await
+        value.insert_returns(self, column).await
     }
 
     pub async fn select<M: Model<'q, DB, E>>(&mut self) -> Result<M, Error>
@@ -197,17 +199,15 @@ where
     }
 
     #[cfg(feature = "serde")]
-    pub async fn update<M: Model, T: Serialize>(&mut self, value: &'q T) -> Result<(), Error> {
+    pub async fn update<T: Serialize>(&mut self, value: &'q T) -> Result<(), Error> {
         let map = QueryMap::from_value(value)?;
-        self.update_map::<M>(map).await
+        self.with_command(QueryCommand::Update(self.table_name()?, map));
+
+        self.execute().await
     }
 
     #[cfg(not(feature = "serde"))]
     pub async fn update<I: QueryMapInput<'q>>(&mut self, value: &'q I) -> Result<(), Error> {
-        self.update_map(value).await
-    }
-
-    pub async fn update_map<I: QueryMapInput<'q>>(&mut self, value: &'q I) -> Result<(), Error> {
         self.with_command(QueryCommand::Update(self.table_name()?, value.to_map()));
         self.execute().await
     }
@@ -500,17 +500,29 @@ impl<'q> Display for QueryCommand<'q> {
 #[cfg(test)]
 mod tests {
     use crate::prelude::*;
+    use serde::Serialize;
     use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
     use sqlx::{FromRow, Sqlite, SqlitePool};
     use std::str::FromStr;
     use uuid::Uuid;
 
+    use crate::json_map;
+    use qb_macro::ModelInsert;
     #[cfg(feature = "serde")]
     use serde_json::json;
 
     #[derive(Model, FromRow)]
     #[model(table_name = "users")]
     struct TestUserModel {}
+
+    #[cfg(feature = "serde")]
+    #[derive(ModelInsert, Serialize)]
+    // #[model(table_name = "users")]
+    #[model(insert_returns = "i32")]
+    struct InsertArg {
+        name: String,
+        age: i32,
+    }
 
     const TABLE_NAME: &'static str = <TestUserModel as Model<Sqlite, &SqlitePool>>::TABLE_NAME;
 
@@ -519,11 +531,27 @@ mod tests {
             .unwrap()
             .create_if_missing(true);
 
-        SqlitePoolOptions::new()
+        let pool = SqlitePoolOptions::new()
             .max_connections(1)
             .connect_with(connection_options)
             .await
-            .unwrap()
+            .unwrap();
+
+        sqlx::query(
+            "
+            DROP TABLE IF EXISTS users;
+            CREATE TABLE IF NOT EXISTS users (
+                id PRIMARY KEY,
+                name TEXT NOT NULL,
+                age INTEGER NOT NULL
+            );
+            ",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        pool
     }
 
     #[tokio::test]
@@ -584,28 +612,58 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_insert_query_sql_str() {
+    async fn test_insert_query_sql_str() -> Result<(), sqlx::Error> {
         let pool = pool().await;
 
         #[cfg(not(feature = "serde"))]
-        let map = query_map! {
-          "name": "Demo User",
-          "age": 34
-        };
+        {
+            let map = query_map! {
+              "name": "Demo User",
+              "age": 34
+            };
+
+            let res = qb.insert_returns(&map, "id").await?;
+        }
 
         #[cfg(feature = "serde")]
-        let map = &json! ({
-          "name": "Demo User",
-          "age": 34
-        });
+        {
+            let mut qb = QB::new(&pool).with_table_name(TABLE_NAME);
+            let jmap = json_map! {
+                TABLE_NAME.parse().unwrap(),
+                "name": "Demo User",
+                "age": 34
+            }?;
 
-        let mut qb = QB::new(&pool).with_table_name(TABLE_NAME);
-        let _res = qb.insert(&map).await;
+            let data = serde_json::to_string(&jmap).unwrap();
+            println!("map_raw: {data}");
+            let _res = qb.insert(&jmap).await?;
+            println!("jmap: {}", qb.sql_str());
+            assert_eq!(
+                qb.sql_str(),
+                "INSERT INTO users (age, name) VALUES ($1, $2)"
+            );
 
-        assert_eq!(
-            qb.sql_str(),
-            "INSERT INTO users (age, name) VALUES ($1, $2)"
-        );
+            let _res: i32 = qb.insert_returns(&jmap, "id").await?;
+            println!("jmap: {}", qb.sql_str());
+            assert_eq!(
+                qb.sql_str(),
+                "INSERT INTO users (age, name) VALUES ($1, $2) RETURNING id"
+            );
+
+            let map = InsertArg {
+                name: "Demo User".to_string(),
+                age: 34,
+            };
+
+            let _res = qb.insert_returns(&map, "id").await?;
+            println!("map: {}", qb.sql_str());
+            assert_eq!(
+                qb.sql_str(),
+                "INSERT INTO users (age, name) VALUES ($1, $2) RETURNING id"
+            );
+        }
+
+        Ok(())
     }
 
     #[tokio::test]

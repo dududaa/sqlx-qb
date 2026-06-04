@@ -47,12 +47,17 @@ pub fn model_insert_derive(input: TokenStream) -> TokenStream {
     let table_name = args.table_name.map(|s| utils::to_snake_case(&s));
     let table_name = table_name.as_deref();
 
+    let table_name_tokens = match table_name {
+        Some(name) => quote! { Some(#name) },
+        None => quote! { None },
+    };
+
     let insert_returns = args.insert_returns;
 
     let expanded = quote! {
-        impl<'q, DB, E> ModelInsert<'q, #insert_returns> for #ident
+        impl<'q> ModelInsert<'q, #insert_returns> for #ident
         {
-            const TABLE_NAME: &'static str = #table_name;
+            const TABLE_NAME: Option<&'q str> = #table_name_tokens;
         }
     };
 

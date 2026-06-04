@@ -20,7 +20,9 @@ pub struct ModelArgs {
 #[derive(FromDeriveInput)]
 #[darling(attributes(model))]
 pub struct ModelInsertArgs {
+    #[darling(default)]
     pub table_name: Option<String>,
+    
     #[darling(default = "default_insert_returns")]
     pub insert_returns: Type
 }
