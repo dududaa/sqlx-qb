@@ -78,16 +78,20 @@ async fn main() -> anyhow::Result<()> {
 
     qb.insert(&map).await?; // INSERT INTO users (name, age) VALUES ("Demo User", 34)
     let id = qb.insert_returns(&map, "id").await?; // Insert and return a field IF YOUR DATABASE SUPPORTS RETURNING.
+```
+If you enable  `serde` feature, you can also pass any struct that implements `serde::Serialize` and `ModelInsert`:
+```rust
+#[derive(ModelInsert, Serialize)]
+// #[model(table_name = "users")]
+// #[model(insert_returns = "i32")] forces type of field to return on insertion.
+struct InsertArg {
+    name: String,
+    age: i32,
+}
 
-    // If you enable "serde" feature, you can also pass any struct that implements serde::Serialize and ModelInsert:
-    #[derive(ModelInsert, Serialize)]
-    // #[model(table_name = "users")]
-    // #[model(insert_returns = "i32")] forces type of field to return on insertion
-    struct InsertArg {
-        name: String,
-        age: i32,
-    }
-
+async fn main() -> anyhow::Result<()> {
+    // ...
+        
     let map = InsertArg {
         name: "Demo User".to_string(),
         age: 34,
@@ -95,27 +99,32 @@ async fn main() -> anyhow::Result<()> {
 
     qb.insert(&map).await?;
     let id = qb.insert_returns(&map, "id").await?;
-}    
-    
+}
 ```
 
 ###### RETRIEVE models
-
+To retrieve a model, make sure the struct implements `sqlx::From` and `Model`.
 ```rust
+#[derive(Model, FromRow)]
+#[model(table_name = "users")]
+struct UserModel {
+    name: String,
+    age: i32
+}
+
 async fn main() -> anyhow::Result<()> {
     // ...
-    // RETRIEVE users. You can use existing QB or create a new one.
-    qb.select_all(); // SELECT * FROM users (This returns all users in Vec<UserModel>);
+    let users: Vec<UserModel> = qb.select_all().await?; // SELECT * FROM users (This returns all users in Vec<UserModel>);
 
     // Add query modifiers to the query
-    let modifiers = QueryModifiers::new()
+    let modifiers = Modifiers::new()
         .with_filter(("id", 4)) // WHERE clause with equal
         .and(eq("age", 32))
         .or(eq("public_id", "some-uuid"))
         .with_limit(1); // query LIMIT (always add this if you want to call the 'select' method to retrieve a single model);
 
     qb.set_modifiers(&modifiers); // SELECT * FROM users WHERE id = 4 AND age = 32 OR public_id = some-uuid LIMIT 1;
-    qb.select().await?; // This returns a single UserModel
+    let user: UserModel = qb.select().await?; // This returns a single UserModel
 
     // What if you only need to get specific fields of the model?
     let total_rows = qb.select_scalar("Count(*)").await?; // select one field
@@ -154,8 +163,8 @@ async fn main() -> anyhow::Result<()> {
       "name": "Updated User Name",
       "age": 52
     };
-
-    qb.update(map).await?;
+    
+    qb.update(&map).await?;
 }
 ```
 

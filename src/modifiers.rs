@@ -1,13 +1,13 @@
 use crate::extensions::{and, or};
 use std::fmt::{Display, Formatter};
 
-pub struct QueryModifiers<'q> {
+pub struct Modifiers<'q> {
     filters: Vec<QueryFilter<'q>>,
     limit: Option<usize>,
     sort_by: Option<QuerySort<'q>>,
 }
 
-impl<'q> QueryModifiers<'q> {
+impl<'q> Modifiers<'q> {
     pub fn new() -> Self {
         Self {
             filters: vec![],
@@ -92,7 +92,7 @@ impl<'q> QueryModifiers<'q> {
     }
 }
 
-impl<'q> Default for QueryModifiers<'q> {
+impl<'q> Default for Modifiers<'q> {
     fn default() -> Self {
         Self::new()
     }

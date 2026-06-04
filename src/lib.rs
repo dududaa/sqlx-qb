@@ -20,7 +20,7 @@ pub mod prelude {
 use crate::model::{Model, ModelInsert};
 use crate::query::{Query, QueryAs, QueryScalar};
 use map::QueryMap;
-use modifiers::QueryModifiers;
+use modifiers::Modifiers;
 use sqlx::{Database, Decode, Encode, Error, Executor, FromRow, IntoArguments, Type};
 use std::fmt::{Display, Formatter};
 use std::ops::{Deref, DerefMut};
@@ -218,7 +218,7 @@ where
         self.execute().await
     }
 
-    pub fn with_modifiers(mut self, modifiers: &'q QueryModifiers<'q>) -> Self {
+    pub fn with_modifiers(mut self, modifiers: &'q Modifiers<'q>) -> Self {
         self.inner.modifiers = Some(modifiers);
         self
     }
@@ -265,7 +265,7 @@ where
     P: Executor<'q, Database = DB> + Clone,
 {
     cmd: QueryCommand<'q>,
-    modifiers: Option<&'q QueryModifiers<'q>>,
+    modifiers: Option<&'q Modifiers<'q>>,
     args: Vec<String>,
     pool: P,
 }
@@ -324,11 +324,11 @@ where
         }
     }
 
-    pub fn modifiers(&self) -> Option<&'q QueryModifiers<'q>> {
+    pub fn modifiers(&self) -> Option<&'q Modifiers<'q>> {
         self.modifiers
     }
 
-    pub fn set_modifiers(&mut self, modifiers: &'q QueryModifiers<'q>) {
+    pub fn set_modifiers(&mut self, modifiers: &'q Modifiers<'q>) {
         self.modifiers = Some(modifiers);
     }
 
@@ -531,7 +531,9 @@ mod tests {
             CREATE TABLE IF NOT EXISTS users (
                 id PRIMARY KEY,
                 name TEXT NOT NULL,
-                age INTEGER NOT NULL
+                age INTEGER NOT NULL,
+                business_id INTEGER,
+                pid TEXT
             );
             ",
         )
@@ -543,9 +545,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_select_query_sql_str() {
+    async fn test_select_query_sql_str() -> Result<(), sqlx::Error> {
         let pool = pool().await;
-        let modifiers = QueryModifiers::new()
+        let modifiers = Modifiers::new()
             .with_filter(("id", 32))
             .and(eq("business_id", 32))
             .or(eq("pid", "some-pid"))
@@ -557,16 +559,32 @@ mod tests {
         assert_eq!(
             qb.sql_str(),
             "SELECT * FROM users WHERE id = $1 AND business_id = $2 OR pid = $3 LIMIT 1"
+        );
+
+        qb.reset_modifiers();
+        qb.select_all::<TestUserModel>().await.ok();
+        assert_eq!(
+            qb.sql_str(),
+            "SELECT * FROM users"
                 .to_string()
         );
 
-        qb.select_all::<TestUserModel>().await.ok();
+        qb.set_table_name(TABLE_NAME);
+        qb.set_modifiers(&modifiers);
+        qb.select_fields::<(String, i32)>(["name", "age"]).await.ok();
+        assert_eq!(
+            qb.sql_str(),
+            "SELECT name, age FROM users WHERE id = $1 AND business_id = $2 OR pid = $3 LIMIT 1"
+                .to_string()
+        );
+
+        Ok(())
     }
 
     #[tokio::test]
     async fn test_update_query_sql_str() {
         let pool = pool().await;
-        let modifiers = QueryModifiers::new()
+        let modifiers = Modifiers::new()
             .with_filter(("id", 32))
             .and(eq("business_id", 32))
             .or(eq("pid", Uuid::new_v4()));
@@ -673,7 +691,7 @@ mod tests {
     async fn test_order_by() {
         let pool = pool().await;
         let modifiers =
-            QueryModifiers::new().with_sort(query_sort!(QuerySortDir::DESC, "created_at"));
+            Modifiers::new().with_sort(query_sort!(QuerySortDir::DESC, "created_at"));
 
         let mut qb = QB::new(&pool).with_modifiers(&modifiers);
         qb.select::<TestUserModel>().await.ok();
